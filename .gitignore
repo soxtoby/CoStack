@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.output/
+.tanstack/
+.vite/
+.pglite/
+.scaffold-reference/
+coverage/
+*.local
+.env
+.env.*
+!.env.example

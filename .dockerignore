@@ -1,0 +1,11 @@
+.git
+.pglite
+.tanstack
+.vite
+coverage
+dist
+node_modules
+*.local
+.env
+.env.*
+!.env.example

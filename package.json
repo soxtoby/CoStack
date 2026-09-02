@@ -1,0 +1,43 @@
+{
+  "name": "costack",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun run src/database/dev.ts",
+    "build": "vite build",
+    "start": "bun run server.ts",
+    "db:migrate": "bun run src/database/migrate.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "check": "bun run typecheck && bun run lint && prettier --check . && bun test"
+  },
+  "dependencies": {
+    "@better-auth/cimd": "1.7.2",
+    "@better-auth/mcp": "1.7.2",
+    "@better-auth/sso": "1.7.2",
+    "@electric-sql/pglite": "^0.5.8",
+    "@electric-sql/pglite-socket": "^0.2.11",
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "@tanstack/react-router": "1.170.32",
+    "@tanstack/react-start": "1.168.49",
+    "better-auth": "1.7.2",
+    "pg": "^8.23.0",
+    "react": "19.2.0",
+    "react-dom": "19.2.0"
+  },
+  "devDependencies": {
+    "@tanstack/eslint-config": "0.4.0",
+    "@tanstack/router-cli": "1.167.33",
+    "@types/bun": "1.4.0",
+    "@types/pg": "^8.23.1",
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.5",
+    "@vitejs/plugin-react": "6.0.1",
+    "eslint": "10.0.2",
+    "prettier": "3.9.6",
+    "typescript": "6.0.2",
+    "vite": "8.0.0"
+  }
+}
