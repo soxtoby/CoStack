@@ -1,7 +1,7 @@
 import { hashPassword } from 'better-auth/crypto'
 import { databasePool } from '../database/pool'
 import { OFFICIAL_REGISTRY } from '../connections/registry'
-import { auth } from './auth'
+import type { Pool } from 'pg'
 
 interface BootstrapInput {
   token: string
@@ -11,12 +11,40 @@ interface BootstrapInput {
   administratorPassword: string
 }
 
-export async function bootstrap(input: BootstrapInput) {
+interface BootstrapDependencies {
+  pool: Pool
+  signUp: (input: {
+    name: string
+    email: string
+    password: string
+  }) => Promise<{
+    user: { id: string; name: string; email: string }
+  }>
+}
+
+export async function bootstrap(
+  input: BootstrapInput,
+  dependencies?: BootstrapDependencies,
+) {
   const expected = process.env.BOOTSTRAP_TOKEN
   if (!expected || input.token !== expected)
     throw new Error('Invalid bootstrap token')
 
-  const pool = databasePool()
+  const pool = dependencies?.pool ?? databasePool()
+  const initial = await pool.query<{ bootstrap_completed_at: Date | null }>(
+    'SELECT bootstrap_completed_at FROM gateway_settings WHERE singleton',
+  )
+  if (initial.rows[0]?.bootstrap_completed_at)
+    throw new Error('Bootstrap has already completed')
+
+  const credentials = {
+    name: input.administratorName,
+    email: input.administratorEmail,
+    password: input.administratorPassword,
+  }
+  const created = dependencies
+    ? await dependencies.signUp(credentials)
+    : await (await import('./auth')).auth.api.signUpEmail({ body: credentials })
   const client = await pool.connect()
   try {
     await client.query('BEGIN')
@@ -29,13 +57,6 @@ export async function bootstrap(input: BootstrapInput) {
       throw new Error('Bootstrap has already completed')
     }
 
-    const created = await auth.api.signUpEmail({
-      body: {
-        name: input.administratorName,
-        email: input.administratorEmail,
-        password: input.administratorPassword,
-      },
-    })
     const organizationId = crypto.randomUUID()
     const groupId = crypto.randomUUID()
     await client.query(

@@ -24,7 +24,11 @@ await pool.end()
 const vite = Bun.spawn(
   ['bunx', 'vite', 'dev', '--host', '0.0.0.0', '--port', '3000'],
   {
-    env: { ...process.env, DATABASE_URL: databaseUrl },
+    env: {
+      ...process.env,
+      DATABASE_URL: databaseUrl,
+      DATABASE_POOL_MAX: '1',
+    },
     stdin: 'inherit',
     stdout: 'inherit',
     stderr: 'inherit',

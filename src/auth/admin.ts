@@ -105,7 +105,7 @@ async function snapshot(request: Request) {
         : Promise.resolve({ rows: [] }),
       may(authorization, 'manage_sso')
         ? pool.query(
-            'SELECT providerId AS provider_id, domain, issuer FROM "ssoProvider"',
+            'SELECT "providerId" AS provider_id, domain, issuer FROM "ssoProvider"',
           )
         : Promise.resolve({ rows: [] }),
     ])
