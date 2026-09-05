@@ -41,6 +41,72 @@ describe('HTTP transport', () => {
 })
 
 describe('registry import', () => {
+  test('browses without a server name and preserves search and pagination parameters', async () => {
+    const urls: Array<URL> = []
+    const page = {
+      servers: [{ server: { name: 'io.example/github', version: '1.2.3' } }],
+      metadata: { nextCursor: 'next/page+1' },
+    }
+    const request = ((input: string | URL | Request) => {
+      urls.push(new URL(String(input)))
+      return Promise.resolve(Response.json(page))
+    }) as typeof fetch
+    const registry = new RegistryClient(
+      'https://registry.example.test',
+      request,
+    )
+    expect(await registry.list()).toEqual(page)
+    expect(urls[0]!.pathname).toBe('/v0.1/servers')
+    expect(urls[0]!.searchParams.has('search')).toBe(false)
+    expect(urls[0]!.searchParams.get('version')).toBe('latest')
+    await registry.list(' git hub ', page.metadata.nextCursor)
+    expect(urls[1]!.searchParams.get('search')).toBe('git hub')
+    expect(urls[1]!.searchParams.get('cursor')).toBe('next/page+1')
+  })
+
+  test('reports registry failures', async () => {
+    const registry = new RegistryClient('https://registry.example.test', (() =>
+      Promise.resolve(
+        new Response(null, { status: 503 }),
+      )) as unknown as typeof fetch)
+    await expect(registry.list()).rejects.toThrow('Registry returned 503')
+  })
+
+  test('imports the selected version with registry provenance and HTTP settings', async () => {
+    let requested: URL | undefined
+    const registry = new RegistryClient('https://registry.example.test', ((
+      input: string | URL | Request,
+    ) => {
+      requested = new URL(String(input))
+      return Promise.resolve(
+        Response.json({
+          server: {
+            name: 'io.example/github',
+            version: '1.2.3',
+            remotes: [
+              { type: 'streamable-http', url: 'https://mcp.example.test/mcp' },
+            ],
+          },
+        }),
+      )
+    }) as typeof fetch)
+    const entry = await registry.get('io.example/github', '1.2.3')
+    expect(requested!.pathname).toBe(
+      '/v0.1/servers/io.example%2Fgithub/versions/1.2.3',
+    )
+    const input = registry.prefill(entry, 'org', 'source')
+    expect(input.registry).toEqual({
+      sourceId: 'source',
+      serverId: 'io.example/github',
+      version: '1.2.3',
+    })
+    expect(input.transport).toEqual({
+      kind: 'streamable_http',
+      url: 'https://mcp.example.test/mcp',
+    })
+    expect(input.state).toBe('disabled')
+  })
+
   test('creates an unsaved, blocked Bun connection prefill', () => {
     const registry = new RegistryClient()
     const result = registry.prefill(

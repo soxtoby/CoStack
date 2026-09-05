@@ -70,7 +70,7 @@ export async function controlHandler(request: Request) {
       return managePersonalAccount(request, body, action)
     if (controlActionAccess(action) === 'manage_connections') {
       const actor = await principal(request, 'manage_connections')
-      return connectionAction(body, action, actor.current.user.id)
+      return await connectionAction(body, action, actor.current.user.id)
     }
     if (controlActionAccess(action) === 'manage_accounts') {
       await principal(request, 'manage_accounts')
@@ -298,6 +298,13 @@ async function connectionAction(
     [String(body.sourceId)],
   )
   if (!source.rows[0]) throw new Error('Registry Source not found')
+  if (action === 'browse-registry')
+    return Response.json(
+      await new RegistryClient(source.rows[0].base_url as string).list(
+        String(body.search ?? ''),
+        body.cursor ? String(body.cursor) : undefined,
+      ),
+    )
   const entry = await new RegistryClient(source.rows[0].base_url as string).get(
     String(body.serverName),
     String(body.version ?? 'latest'),

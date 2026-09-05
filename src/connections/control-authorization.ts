@@ -13,6 +13,7 @@ export function controlActionAccess(action: string): ControlAccess | undefined {
       'refresh-connection',
       'create-registry-source',
       'import-registry',
+      'browse-registry',
     ].includes(action)
   )
     return 'manage_connections'

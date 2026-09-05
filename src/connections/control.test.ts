@@ -18,6 +18,17 @@ function principal(
 }
 
 describe('/api/control action authorization', () => {
+  test('restricts registry browsing and import to connection managers', () => {
+    for (const action of ['browse-registry', 'import-registry']) {
+      expect(mayPerformControlAction(principal(), action)).toBe(false)
+      expect(
+        mayPerformControlAction(principal(['manage_accounts']), action),
+      ).toBe(false)
+      expect(
+        mayPerformControlAction(principal(['manage_connections']), action),
+      ).toBe(true)
+    }
+  })
   test('reserves audit retention changes for Administrators', () => {
     expect(controlActionAccess('set-audit-retention')).toBe('administrator')
     expect(

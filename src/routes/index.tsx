@@ -1,6 +1,8 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { useEffect, useState } from 'react'
 import type { FormEvent, ReactNode } from 'react'
+import type { ConnectionInput } from '../connections/types'
+import type { RegistryServer } from '../connections/registry'
 
 export const Route = createFileRoute('/')({ component: App })
 type Group = {
@@ -83,6 +85,7 @@ function App() {
           {links.map(([id, label], i) => (
             <button
               className={page === id ? 'active' : ''}
+              aria-current={page === id ? 'page' : undefined}
               onClick={() => setPage(id!)}
               key={id}
             >
@@ -96,7 +99,11 @@ function App() {
           <small>
             {data.authorization?.administrator ? 'Administrator' : 'Operator'}
           </small>
-          <button onClick={() => act('sign-out').then(() => location.reload())}>
+          <button
+            aria-label="Sign out"
+            title="Sign out"
+            onClick={() => act('sign-out').then(() => location.reload())}
+          >
             ↗
           </button>
         </footer>
@@ -171,6 +178,7 @@ function Connections({ data }: { data: Data }) {
   const [control, setControl] = useState<ControlData>()
   const [selected, setSelected] = useState<string>()
   const [creating, setCreating] = useState(false)
+  const [browsing, setBrowsing] = useState(false)
   const load = async (id = selected) => {
     const r = await fetch(
       `/api/control${id ? `?connection=${encodeURIComponent(id)}` : ''}`,
@@ -189,23 +197,53 @@ function Connections({ data }: { data: Data }) {
     <Page
       eyebrow="Gateway routing"
       title="MCP Connections"
-      intro="One guarded catalog. Search finds tools; Accounts choose the upstream identity."
+      intro="Browse the registry to add an MCP server, or configure a connection manually."
     >
       <div className="toolbar">
         <span>{control.connections.length} configured</span>
         {canConnections && (
-          <button className="primary" onClick={() => setCreating(!creating)}>
-            {creating ? 'Close' : 'New Connection'} <b>+</b>
-          </button>
+          <div className="detail-actions">
+            <button
+              className="primary"
+              aria-expanded={browsing}
+              onClick={() => {
+                setBrowsing(!browsing)
+                setCreating(false)
+              }}
+            >
+              {browsing ? 'Close registry' : 'Browse registry'}
+            </button>
+            <button
+              className="secondary"
+              aria-expanded={creating}
+              onClick={() => {
+                setCreating(!creating)
+                setBrowsing(false)
+              }}
+            >
+              {creating ? 'Cancel' : 'Add manually'}
+            </button>
+          </div>
         )}
       </div>
+      {browsing && canConnections && (
+        <RegistryPanel
+          data={data}
+          control={control}
+          reload={() => load()}
+          done={(id) => {
+            setBrowsing(false)
+            setSelected(id)
+          }}
+        />
+      )}
       {creating && (
         <ConnectionForm
           data={data}
           organizationId={control.organizationId!}
-          done={() => {
+          done={(id) => {
             setCreating(false)
-            load()
+            setSelected(id)
           }}
         />
       )}
@@ -239,9 +277,6 @@ function Connections({ data }: { data: Data }) {
           )}
         </section>
       </div>
-      {canConnections && (
-        <RegistryPanel control={control} reload={() => load()} />
-      )}
     </Page>
   )
 }
@@ -249,14 +284,15 @@ function Connections({ data }: { data: Data }) {
 function ConnectionForm(p: {
   data: Data
   organizationId: string
-  done: () => void
+  initial?: ConnectionInput
+  done: (id: string) => void
 }) {
   const [kind, setKind] = useState<'streamable_http' | 'stdio'>(
-    'streamable_http',
+    p.initial?.transport.kind ?? 'streamable_http',
   )
   return (
     <Form
-      title="New MCP Connection"
+      title={p.initial ? 'Review connection' : 'New MCP Connection'}
       submit="Validate and save"
       go={async (f) => {
         const policies = parsePolicies(String(f.get('policies') || '* = block'))
@@ -266,11 +302,20 @@ function ConnectionForm(p: {
             : {
                 kind,
                 command: String(f.get('command')),
-                args: String(f.get('args') || '')
-                  .split(/\s+/)
-                  .filter(Boolean),
+                args: p.initial
+                  ? JSON.parse(String(f.get('args') || '[]'))
+                  : String(f.get('args') || '')
+                      .split(/\s+/)
+                      .filter(Boolean),
               }
-        await controlAct('create-connection', {
+        if (
+          transport.kind === 'stdio' &&
+          (!Array.isArray(transport.args) ||
+            !transport.args.every((arg: unknown) => typeof arg === 'string'))
+        ) {
+          throw new Error('Arguments must be a JSON array of strings.')
+        }
+        const result = await controlAct('create-connection', {
           input: {
             organizationId: p.organizationId,
             displayName: String(f.get('displayName')),
@@ -279,14 +324,19 @@ function ConnectionForm(p: {
             state: 'disabled',
             groupIds: f.getAll('groups').map(String),
             policies,
+            registry: p.initial?.registry,
           },
         })
-        p.done()
+        p.done(result.id)
       }}
     >
       <div className="form-grid">
         <Field label="Display name">
-          <input name="displayName" required />
+          <input
+            name="displayName"
+            required
+            defaultValue={p.initial?.displayName}
+          />
         </Field>
         <Field label="Namespace, fixed after save">
           <input name="namespace" placeholder="derived_from_name" />
@@ -315,21 +365,54 @@ function ConnectionForm(p: {
             type="url"
             required
             placeholder="https://mcp.example.com/mcp"
+            defaultValue={
+              p.initial?.transport.kind === 'streamable_http'
+                ? p.initial.transport.url
+                : undefined
+            }
           />
         </Field>
       ) : (
         <div className="form-grid">
           <Field label="Command">
-            <input name="command" required placeholder="bunx or dotnet" />
+            <input
+              name="command"
+              required
+              placeholder="bunx or dotnet"
+              defaultValue={
+                p.initial?.transport.kind === 'stdio'
+                  ? p.initial.transport.command
+                  : undefined
+              }
+            />
           </Field>
-          <Field label="Arguments">
-            <input name="args" placeholder="@scope/server@1.2.3" />
+          <Field label={p.initial ? 'Arguments (JSON array)' : 'Arguments'}>
+            <input
+              name="args"
+              placeholder={
+                p.initial ? '["@scope/server@1.2.3"]' : '@scope/server@1.2.3'
+              }
+              defaultValue={
+                p.initial?.transport.kind === 'stdio'
+                  ? JSON.stringify(p.initial.transport.args ?? [])
+                  : undefined
+              }
+            />
           </Field>
         </div>
       )}
       <GroupChecks groups={p.data.groups ?? []} />
       <Field label="Tool policies, one pattern = effect per line">
-        <textarea name="policies" defaultValue={'* = block\nread_* = allow'} />
+        <textarea
+          name="policies"
+          defaultValue={
+            p.initial
+              ? p.initial.policies
+                  .map((policy) => `${policy.pattern} = ${policy.effect}`)
+                  .join('\n')
+              : '* = block\nread_* = allow'
+          }
+        />
       </Field>
     </Form>
   )
@@ -691,57 +774,98 @@ function AccountForm(p: {
   )
 }
 
-function RegistryPanel(p: { control: ControlData; reload: () => void }) {
-  const [prefill, setPrefill] = useState<Record<string, unknown>>()
+function RegistryPanel(p: {
+  data: Data
+  control: ControlData
+  reload: () => void
+  done: (id: string) => void
+}) {
+  const [prefill, setPrefill] = useState<ConnectionInput>()
   const [adding, setAdding] = useState(false)
+  const [sourceId, setSourceId] = useState(
+    p.control.registrySources[0]?.id ?? '',
+  )
+  const [query, setQuery] = useState('')
+  const [search, setSearch] = useState('')
+  const [cursor, setCursor] = useState<string>()
+  const [results, setResults] = useState<Array<RegistryServer>>([])
+  const [nextCursor, setNextCursor] = useState<string>()
+  const [loading, setLoading] = useState(true)
+  const [importing, setImporting] = useState(false)
+  const [error, setError] = useState('')
+  const [retry, setRetry] = useState(0)
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+    setError('')
+    controlAct('browse-registry', { sourceId, search, cursor })
+      .then((result) => {
+        if (cancelled) return
+        setResults((previous) =>
+          cursor ? [...previous, ...result.servers] : result.servers,
+        )
+        setNextCursor(result.metadata?.nextCursor)
+      })
+      .catch((e: Error) => {
+        if (!cancelled) setError(e.message)
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [sourceId, search, cursor, retry])
+  if (prefill)
+    return (
+      <section className="registry">
+        <button className="secondary" onClick={() => setPrefill(undefined)}>
+          Back to registry
+        </button>
+        <p>
+          <b>{prefill.registry?.serverId}</b> · Version{' '}
+          {prefill.registry?.version}
+        </p>
+        <p>
+          Review the settings, then save. New connections start disabled with
+          tools blocked. After saving, configure Accounts and Tool Policies,
+          then enable the connection.
+        </p>
+        <ConnectionForm
+          data={p.data}
+          organizationId={p.control.organizationId!}
+          initial={prefill}
+          done={p.done}
+        />
+      </section>
+    )
   return (
-    <section className="registry">
-      <code>REGISTRY / V0.1</code>
-      <h2>Import a definition</h2>
-      <button className="secondary" onClick={() => setAdding(!adding)}>
-        {adding ? 'Close' : 'Add Registry Source'}
-      </button>
-      {adding && (
-        <Form
-          compact
-          submit="Add source"
-          go={async (f) => {
-            await controlAct('create-registry-source', {
-              organizationId: p.control.organizationId,
-              displayName: String(f.get('displayName')),
-              baseUrl: String(f.get('baseUrl')),
-            })
-            setAdding(false)
-            p.reload()
-          }}
-        >
-          <Field label="Display name">
-            <input name="displayName" required />
-          </Field>
-          <Field label="Registry v0.1 base URL">
-            <input
-              name="baseUrl"
-              type="url"
-              required
-              placeholder="https://registry.example.com"
-            />
-          </Field>
-        </Form>
-      )}
-      <Form
-        compact
-        submit="Fetch metadata"
-        go={async (f) => {
-          const result = await controlAct('import-registry', {
-            sourceId: String(f.get('sourceId')),
-            serverName: String(f.get('serverName')),
-            organizationId: p.control.organizationId,
-          })
-          setPrefill(result.input)
+    <section className="registry" aria-label="Browse MCP registry">
+      <h2>Browse MCP registry</h2>
+      <p>
+        Search by part of a server name, or browse the list. Select a server to
+        review its connection settings.
+      </p>
+      <form
+        className="registry-search"
+        onSubmit={(e) => {
+          e.preventDefault()
+          setResults([])
+          setCursor(undefined)
+          setSearch(query)
+          setRetry((value) => value + 1)
         }}
       >
-        <Field label="Registry Source">
-          <select name="sourceId">
+        <Field label="Registry">
+          <select
+            value={sourceId}
+            disabled={importing}
+            onChange={(e) => {
+              setSourceId(e.target.value)
+              setCursor(undefined)
+              setResults([])
+            }}
+          >
             {p.control.registrySources.map((s) => (
               <option value={s.id} key={s.id}>
                 {s.display_name}
@@ -749,15 +873,122 @@ function RegistryPanel(p: { control: ControlData; reload: () => void }) {
             ))}
           </select>
         </Field>
-        <Field label="Server name">
-          <input name="serverName" required placeholder="io.example/server" />
+        <Field label="Search servers">
+          <input
+            value={query}
+            disabled={importing}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="e.g. github or filesystem"
+          />
         </Field>
-      </Form>
-      {prefill && <pre>{JSON.stringify(prefill, null, 2)}</pre>}
+        <button className="primary" disabled={loading || importing}>
+          Search
+        </button>
+      </form>
+      {error && (
+        <div role="alert">
+          <p className="error">{error}</p>
+          <button
+            className="secondary"
+            disabled={loading || importing}
+            onClick={() => {
+              setCursor(undefined)
+              setResults([])
+              setRetry((value) => value + 1)
+            }}
+          >
+            Retry
+          </button>
+        </div>
+      )}
+      <div className="registry-results" aria-busy={loading || importing}>
+        {results.map(({ server }) => (
+          <article key={`${server.name}:${server.version}`}>
+            <div>
+              <b>{server.name}</b>
+              <small>Version {server.version}</small>
+              <p>{server.description || 'No description provided.'}</p>
+            </div>
+            <button
+              className="secondary"
+              disabled={loading || importing}
+              onClick={async () => {
+                setImporting(true)
+                setError('')
+                try {
+                  const result = await controlAct('import-registry', {
+                    sourceId,
+                    serverName: server.name,
+                    version: server.version,
+                    organizationId: p.control.organizationId,
+                  })
+                  setPrefill(result.input)
+                } catch (e) {
+                  setError(
+                    e instanceof Error ? e.message : 'Could not load server',
+                  )
+                } finally {
+                  setImporting(false)
+                }
+              }}
+            >
+              Use this server
+            </button>
+          </article>
+        ))}
+      </div>
+      {loading && <p role="status">Loading servers…</p>}
+      {importing && <p role="status">Loading connection settings…</p>}
+      {!loading && !error && results.length === 0 && (
+        <p role="status">
+          No servers found. Try a shorter name or another registry.
+        </p>
+      )}
+      {nextCursor && !error && (
+        <button
+          className="secondary"
+          disabled={loading || importing}
+          onClick={() => setCursor(nextCursor)}
+        >
+          Load more servers
+        </button>
+      )}
+      <details
+        className="registry-sources"
+        open={adding}
+        onToggle={(e) => setAdding(e.currentTarget.open)}
+      >
+        <summary>Add a registry source</summary>
+        {adding && (
+          <Form
+            submit="Add source"
+            go={async (f) => {
+              await controlAct('create-registry-source', {
+                organizationId: p.control.organizationId,
+                displayName: String(f.get('displayName')),
+                baseUrl: String(f.get('baseUrl')),
+              })
+              setAdding(false)
+              p.reload()
+            }}
+          >
+            <Field label="Display name">
+              <input name="displayName" required />
+            </Field>
+            <Field label="Registry URL">
+              <input
+                name="baseUrl"
+                type="url"
+                required
+                placeholder="https://registry.example.com"
+              />
+            </Field>
+          </Form>
+        )}
+      </details>
     </section>
   )
 }
-
 function Preferences() {
   const [data, setData] = useState<ControlData>()
   useEffect(
@@ -1482,24 +1713,30 @@ function Form(p: {
   children: ReactNode
 }) {
   const [error, setError] = useState('')
+  const [submitting, setSubmitting] = useState(false)
   return (
     <form
       className={`action-form ${p.compact ? 'compact' : ''}`}
       onSubmit={async (e: FormEvent<HTMLFormElement>) => {
         e.preventDefault()
+        if (submitting) return
+        const form = e.currentTarget
+        setSubmitting(true)
         setError('')
         try {
-          await p.go(new FormData(e.currentTarget))
-          e.currentTarget.reset()
+          await p.go(new FormData(form))
+          form.reset()
         } catch (x) {
           setError(x instanceof Error ? x.message : 'Request failed')
+        } finally {
+          setSubmitting(false)
         }
       }}
     >
       {p.title && <h2>{p.title}</h2>}
       {p.children}
-      <button className="primary">
-        {p.submit}
+      <button className="primary" disabled={submitting}>
+        {submitting ? 'Saving…' : p.submit}
         <b>→</b>
       </button>
       {error && <p className="error">{error}</p>}

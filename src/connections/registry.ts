@@ -24,6 +24,23 @@ export class RegistryClient {
     private readonly request: typeof fetch = fetch,
   ) {}
 
+  async list(
+    search = '',
+    cursor?: string,
+  ): Promise<{
+    servers: Array<RegistryServer>
+    metadata?: { nextCursor?: string }
+  }> {
+    const url = new URL('/v0.1/servers', this.baseUrl)
+    url.searchParams.set('version', 'latest')
+    url.searchParams.set('limit', '20')
+    if (search.trim()) url.searchParams.set('search', search.trim())
+    if (cursor) url.searchParams.set('cursor', cursor)
+    const response = await this.request(url)
+    if (!response.ok) throw new Error(`Registry returned ${response.status}`)
+    return response.json()
+  }
+
   async get(serverName: string, version = 'latest'): Promise<RegistryServer> {
     const url = new URL(
       `/v0.1/servers/${encodeURIComponent(serverName)}/versions/${encodeURIComponent(version)}`,
