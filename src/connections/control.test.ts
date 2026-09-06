@@ -19,7 +19,11 @@ function principal(
 
 describe('/api/control action authorization', () => {
   test('restricts registry browsing and import to connection managers', () => {
-    for (const action of ['browse-registry', 'import-registry']) {
+    for (const action of [
+      'browse-registry',
+      'import-registry',
+      'set-tool-policies',
+    ]) {
       expect(mayPerformControlAction(principal(), action)).toBe(false)
       expect(
         mayPerformControlAction(principal(['manage_accounts']), action),

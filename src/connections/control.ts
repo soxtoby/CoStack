@@ -61,20 +61,20 @@ export async function controlHandler(request: Request) {
     if (action === 'set-approval-method')
       return setApprovalMethod(request, body)
     if (action === 'create-personal-account')
-      return createPersonalAccount(request, body)
+      return await createPersonalAccount(request, body)
     if (
       action === 'replace-personal-secret' ||
       action === 'delete-personal-secret' ||
       action === 'delete-personal-account'
     )
-      return managePersonalAccount(request, body, action)
+      return await managePersonalAccount(request, body, action)
     if (controlActionAccess(action) === 'manage_connections') {
       const actor = await principal(request, 'manage_connections')
       return await connectionAction(body, action, actor.current.user.id)
     }
     if (controlActionAccess(action) === 'manage_accounts') {
       await principal(request, 'manage_accounts')
-      return accountAction(body, action)
+      return await accountAction(body, action)
     }
     if (action === 'set-audit-retention') {
       const actor = await principal(request)
@@ -95,9 +95,13 @@ export async function controlHandler(request: Request) {
 export async function upstreamOAuthRequestHandler(request: Request) {
   try {
     if (request.method === 'GET')
-      return upstreamOAuthHandler(request, await manager())
+      return await upstreamOAuthHandler(request, await manager())
     const actor = await principal(request)
-    return upstreamOAuthHandler(request, await manager(), actor.current.user.id)
+    return await upstreamOAuthHandler(
+      request,
+      await manager(),
+      actor.current.user.id,
+    )
   } catch (error) {
     if (error instanceof Response) return error
     return Response.json(
@@ -180,7 +184,9 @@ async function connectionDetail(
     pool.query(
       `SELECT id,display_name,namespace,transport,transport_config,state,revision,
        registry_source_id,registry_server_id,registry_version,
-       oauth_client_ciphertext IS NOT NULL has_oauth
+       oauth_client_ciphertext IS NOT NULL has_oauth,
+       ARRAY(SELECT group_id FROM connection_groups WHERE connection_id=c.id) group_ids,
+       EXISTS (SELECT 1 FROM connection_groups cg JOIN group_memberships gm ON gm.group_id=cg.group_id WHERE cg.connection_id=c.id AND gm.principal_id=$3) personal_account_eligible
        FROM mcp_connections c WHERE id=$1 AND ($2 OR EXISTS (
          SELECT 1 FROM connection_groups cg
          JOIN group_memberships gm ON gm.group_id=cg.group_id
@@ -249,6 +255,14 @@ async function connectionAction(
   userId: string,
 ) {
   const service = await manager()
+  if (action === 'set-tool-policies')
+    return Response.json(
+      await service.setToolPolicies(
+        String(body.id),
+        Number(body.revision),
+        body.policies as Array<ToolPolicy>,
+      ),
+    )
   if (action === 'create-connection')
     return Response.json(await service.create(body.input as ConnectionInput))
   if (action === 'edit-connection')
@@ -399,7 +413,14 @@ async function assertEligible(connectionId: string, principalId: string) {
     `SELECT 1 FROM connection_groups cg JOIN group_memberships gm ON gm.group_id=cg.group_id WHERE cg.connection_id=$1 AND gm.principal_id=$2 LIMIT 1`,
     [connectionId, principalId],
   )
-  if (!result.rows[0]) throw new Response('Forbidden', { status: 403 })
+  if (!result.rows[0])
+    throw Response.json(
+      {
+        error:
+          'Personal sign-in requires membership in a Group assigned to this connection. Edit Group access to assign one of your Groups, then try again.',
+      },
+      { status: 403 },
+    )
 }
 async function assertAccountKind(id: unknown, kind: string) {
   const found = await databasePool().query(

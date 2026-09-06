@@ -16,6 +16,7 @@ import type { OAuthClientConfig } from './types'
 const FLOW_LIFETIME_MS = 10 * 60 * 1000
 
 type StoredAuthorization = {
+  client?: string
   verifier?: string
   tokens?: string
   discovery?: string
@@ -78,7 +79,7 @@ export class UpstreamOAuth {
     )
     const result = await auth(provider, {
       serverUrl: context.serverUrl,
-      ...(context.client.scope ? { scope: context.client.scope } : {}),
+      ...(context.client?.scope ? { scope: context.client.scope } : {}),
     })
     if (result !== 'REDIRECT' || !provider.authorizationUrl)
       throw new Error('Upstream did not start interactive authorization')
@@ -109,7 +110,7 @@ export class UpstreamOAuth {
     const result = await auth(provider, {
       serverUrl: context.serverUrl,
       authorizationCode: code,
-      ...(context.client.scope ? { scope: context.client.scope } : {}),
+      ...(context.client?.scope ? { scope: context.client.scope } : {}),
     })
     if (result !== 'AUTHORIZED')
       throw new Error('Authorization did not complete')
@@ -163,14 +164,14 @@ export class UpstreamOAuth {
       throw new Error('Personal Account belongs to another User')
     if (principalId && row.kind === 'shared' && !row.can_manage)
       throw new Error('Shared Account authorization requires manage_accounts')
-    if (!row.oauth_client_ciphertext)
-      throw new Error('Connection OAuth client is not configured')
     const transport = row.transport_config as { kind: string; url?: string }
     if (transport.kind !== 'streamable_http' || !transport.url)
       throw new Error('OAuth requires a Streamable HTTP Connection')
-    const client = fromStrings(
-      await this.vault.open(envelopeFrom(row)),
-    ) as OAuthClientConfig
+    const client = row.oauth_client_ciphertext
+      ? (fromStrings(
+          await this.vault.open(envelopeFrom(row)),
+        ) as OAuthClientConfig)
+      : undefined
     return {
       accountId,
       connectionId: row.connection_id as string,
@@ -188,7 +189,7 @@ type OAuthContext = {
   accountId: string
   connectionId: string
   serverUrl: string
-  client: OAuthClientConfig
+  client: OAuthClientConfig | undefined
 }
 
 class DatabaseOAuthProvider implements OAuthClientProvider {
@@ -209,8 +210,10 @@ class DatabaseOAuthProvider implements OAuthClientProvider {
       client_name: 'CoStack',
       grant_types: ['authorization_code', 'refresh_token'],
       response_types: ['code'],
-      token_endpoint_auth_method: 'client_secret_basic',
-      ...(this.context.client.scope
+      token_endpoint_auth_method: this.context.client?.clientSecret
+        ? 'client_secret_basic'
+        : 'none',
+      ...(this.context.client?.scope
         ? { scope: this.context.client.scope }
         : {}),
     }
@@ -219,11 +222,20 @@ class DatabaseOAuthProvider implements OAuthClientProvider {
   state() {
     return this.flowState
   }
-  clientInformation(): OAuthClientInformationMixed {
-    return {
-      client_id: this.context.client.clientId,
-      client_secret: this.context.client.clientSecret,
-    }
+  async clientInformation(): Promise<OAuthClientInformationMixed | undefined> {
+    if (this.context.client)
+      return {
+        client_id: this.context.client.clientId,
+        client_secret: this.context.client.clientSecret,
+      }
+    const client = this.flow.client ?? (await this.accountSecrets()).oauthClient
+    return client
+      ? (JSON.parse(client) as OAuthClientInformationMixed)
+      : undefined
+  }
+  async saveClientInformation(client: OAuthClientInformationMixed) {
+    this.flow.client = JSON.stringify(client)
+    if (this.flowState) await this.saveFlow()
   }
   async tokens() {
     const stored = await this.accountSecrets()
@@ -234,6 +246,7 @@ class DatabaseOAuthProvider implements OAuthClientProvider {
   async saveTokens(tokens: OAuthTokens) {
     const stored = await this.accountSecrets()
     stored.oauthTokens = JSON.stringify(tokens)
+    if (this.flow.client) stored.oauthClient = this.flow.client
     await this.saveAccountSecrets(stored)
   }
   redirectToAuthorization(url: URL) {
@@ -259,6 +272,12 @@ class DatabaseOAuthProvider implements OAuthClientProvider {
   async invalidateCredentials(
     scope: 'all' | 'client' | 'tokens' | 'verifier' | 'discovery',
   ) {
+    if (scope === 'client' || scope === 'all') {
+      delete this.flow.client
+      const stored = await this.accountSecrets()
+      delete stored.oauthClient
+      await this.saveAccountSecrets(stored)
+    }
     if (scope === 'tokens' || scope === 'all') {
       const stored = await this.accountSecrets()
       delete stored.oauthTokens

@@ -10,19 +10,35 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AppRouteImport } from './routes/_app'
 import { Route as HealthRouteImport } from './routes/health'
 import { Route as McpRouteImport } from './routes/mcp'
+import { Route as AppAuditRouteImport } from './routes/_app.audit'
+import { Route as AppConnectionsRouteImport } from './routes/_app.connections'
+import { Route as AppGroupsRouteImport } from './routes/_app.groups'
+import { Route as AppOverviewRouteImport } from './routes/_app.overview'
+import { Route as AppPreProvisionedAccessRouteImport } from './routes/_app.pre-provisioned-access'
+import { Route as AppPreferencesRouteImport } from './routes/_app.preferences'
+import { Route as AppServiceAccountsRouteImport } from './routes/_app.service-accounts'
+import { Route as AppSsoRouteImport } from './routes/_app.sso'
+import { Route as AppUsersRouteImport } from './routes/_app.users'
 import { Route as ApiAdminRouteImport } from './routes/api/admin'
 import { Route as ApiControlRouteImport } from './routes/api/control'
 import { Route as OauthConsentRouteImport } from './routes/oauth/consent'
+import { Route as AppConnectionsNewRouteImport } from './routes/_app.connections_.new'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as ApiSetupSplatRouteImport } from './routes/api/setup/$'
 import { Route as ApiUpstreamOauthCallbackRouteImport } from './routes/api/upstream-oauth/callback'
 import { Route as ApiUpstreamOauthStartRouteImport } from './routes/api/upstream-oauth/start'
+import { Route as AppConnectionsConnectionIdConfigureRouteImport } from './routes/_app.connections_.$connectionId.configure'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AppRoute = AppRouteImport.update({
+  id: '/_app',
   getParentRoute: () => rootRouteImport,
 } as any)
 const HealthRoute = HealthRouteImport.update({
@@ -34,6 +50,51 @@ const McpRoute = McpRouteImport.update({
   id: '/mcp',
   path: '/mcp',
   getParentRoute: () => rootRouteImport,
+} as any)
+const AppAuditRoute = AppAuditRouteImport.update({
+  id: '/audit',
+  path: '/audit',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppConnectionsRoute = AppConnectionsRouteImport.update({
+  id: '/connections',
+  path: '/connections',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppGroupsRoute = AppGroupsRouteImport.update({
+  id: '/groups',
+  path: '/groups',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppOverviewRoute = AppOverviewRouteImport.update({
+  id: '/overview',
+  path: '/overview',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppPreProvisionedAccessRoute = AppPreProvisionedAccessRouteImport.update({
+  id: '/pre-provisioned-access',
+  path: '/pre-provisioned-access',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppPreferencesRoute = AppPreferencesRouteImport.update({
+  id: '/preferences',
+  path: '/preferences',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppServiceAccountsRoute = AppServiceAccountsRouteImport.update({
+  id: '/service-accounts',
+  path: '/service-accounts',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppSsoRoute = AppSsoRouteImport.update({
+  id: '/sso',
+  path: '/sso',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppUsersRoute = AppUsersRouteImport.update({
+  id: '/users',
+  path: '/users',
+  getParentRoute: () => AppRoute,
 } as any)
 const ApiAdminRoute = ApiAdminRouteImport.update({
   id: '/api/admin',
@@ -49,6 +110,11 @@ const OauthConsentRoute = OauthConsentRouteImport.update({
   id: '/oauth/consent',
   path: '/oauth/consent',
   getParentRoute: () => rootRouteImport,
+} as any)
+const AppConnectionsNewRoute = AppConnectionsNewRouteImport.update({
+  id: '/connections_/new',
+  path: '/connections/new',
+  getParentRoute: () => AppRoute,
 } as any)
 const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   id: '/api/auth/$',
@@ -71,43 +137,83 @@ const ApiUpstreamOauthStartRoute = ApiUpstreamOauthStartRouteImport.update({
   path: '/api/upstream-oauth/start',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AppConnectionsConnectionIdConfigureRoute =
+  AppConnectionsConnectionIdConfigureRouteImport.update({
+    id: '/connections_/$connectionId/configure',
+    path: '/connections/$connectionId/configure',
+    getParentRoute: () => AppRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/health': typeof HealthRoute
   '/mcp': typeof McpRoute
+  '/audit': typeof AppAuditRoute
+  '/connections': typeof AppConnectionsRoute
+  '/groups': typeof AppGroupsRoute
+  '/overview': typeof AppOverviewRoute
+  '/pre-provisioned-access': typeof AppPreProvisionedAccessRoute
+  '/preferences': typeof AppPreferencesRoute
+  '/service-accounts': typeof AppServiceAccountsRoute
+  '/sso': typeof AppSsoRoute
+  '/users': typeof AppUsersRoute
   '/api/admin': typeof ApiAdminRoute
   '/api/control': typeof ApiControlRoute
   '/oauth/consent': typeof OauthConsentRoute
+  '/connections/new': typeof AppConnectionsNewRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/setup/$': typeof ApiSetupSplatRoute
   '/api/upstream-oauth/callback': typeof ApiUpstreamOauthCallbackRoute
   '/api/upstream-oauth/start': typeof ApiUpstreamOauthStartRoute
+  '/connections/$connectionId/configure': typeof AppConnectionsConnectionIdConfigureRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/health': typeof HealthRoute
   '/mcp': typeof McpRoute
+  '/audit': typeof AppAuditRoute
+  '/connections': typeof AppConnectionsRoute
+  '/groups': typeof AppGroupsRoute
+  '/overview': typeof AppOverviewRoute
+  '/pre-provisioned-access': typeof AppPreProvisionedAccessRoute
+  '/preferences': typeof AppPreferencesRoute
+  '/service-accounts': typeof AppServiceAccountsRoute
+  '/sso': typeof AppSsoRoute
+  '/users': typeof AppUsersRoute
   '/api/admin': typeof ApiAdminRoute
   '/api/control': typeof ApiControlRoute
   '/oauth/consent': typeof OauthConsentRoute
+  '/connections/new': typeof AppConnectionsNewRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/setup/$': typeof ApiSetupSplatRoute
   '/api/upstream-oauth/callback': typeof ApiUpstreamOauthCallbackRoute
   '/api/upstream-oauth/start': typeof ApiUpstreamOauthStartRoute
+  '/connections/$connectionId/configure': typeof AppConnectionsConnectionIdConfigureRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/_app': typeof AppRouteWithChildren
   '/health': typeof HealthRoute
   '/mcp': typeof McpRoute
+  '/_app/audit': typeof AppAuditRoute
+  '/_app/connections': typeof AppConnectionsRoute
+  '/_app/groups': typeof AppGroupsRoute
+  '/_app/overview': typeof AppOverviewRoute
+  '/_app/pre-provisioned-access': typeof AppPreProvisionedAccessRoute
+  '/_app/preferences': typeof AppPreferencesRoute
+  '/_app/service-accounts': typeof AppServiceAccountsRoute
+  '/_app/sso': typeof AppSsoRoute
+  '/_app/users': typeof AppUsersRoute
   '/api/admin': typeof ApiAdminRoute
   '/api/control': typeof ApiControlRoute
   '/oauth/consent': typeof OauthConsentRoute
+  '/_app/connections_/new': typeof AppConnectionsNewRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/setup/$': typeof ApiSetupSplatRoute
   '/api/upstream-oauth/callback': typeof ApiUpstreamOauthCallbackRoute
   '/api/upstream-oauth/start': typeof ApiUpstreamOauthStartRoute
+  '/_app/connections_/$connectionId/configure': typeof AppConnectionsConnectionIdConfigureRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -115,41 +221,76 @@ export interface FileRouteTypes {
     | '/'
     | '/health'
     | '/mcp'
+    | '/audit'
+    | '/connections'
+    | '/groups'
+    | '/overview'
+    | '/pre-provisioned-access'
+    | '/preferences'
+    | '/service-accounts'
+    | '/sso'
+    | '/users'
     | '/api/admin'
     | '/api/control'
     | '/oauth/consent'
+    | '/connections/new'
     | '/api/auth/$'
     | '/api/setup/$'
     | '/api/upstream-oauth/callback'
     | '/api/upstream-oauth/start'
+    | '/connections/$connectionId/configure'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/health'
     | '/mcp'
+    | '/audit'
+    | '/connections'
+    | '/groups'
+    | '/overview'
+    | '/pre-provisioned-access'
+    | '/preferences'
+    | '/service-accounts'
+    | '/sso'
+    | '/users'
     | '/api/admin'
     | '/api/control'
     | '/oauth/consent'
+    | '/connections/new'
     | '/api/auth/$'
     | '/api/setup/$'
     | '/api/upstream-oauth/callback'
     | '/api/upstream-oauth/start'
+    | '/connections/$connectionId/configure'
   id:
     | '__root__'
     | '/'
+    | '/_app'
     | '/health'
     | '/mcp'
+    | '/_app/audit'
+    | '/_app/connections'
+    | '/_app/groups'
+    | '/_app/overview'
+    | '/_app/pre-provisioned-access'
+    | '/_app/preferences'
+    | '/_app/service-accounts'
+    | '/_app/sso'
+    | '/_app/users'
     | '/api/admin'
     | '/api/control'
     | '/oauth/consent'
+    | '/_app/connections_/new'
     | '/api/auth/$'
     | '/api/setup/$'
     | '/api/upstream-oauth/callback'
     | '/api/upstream-oauth/start'
+    | '/_app/connections_/$connectionId/configure'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AppRoute: typeof AppRouteWithChildren
   HealthRoute: typeof HealthRoute
   McpRoute: typeof McpRoute
   ApiAdminRoute: typeof ApiAdminRoute
@@ -170,6 +311,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_app': {
+      id: '/_app'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof AppRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/health': {
       id: '/health'
       path: '/health'
@@ -183,6 +331,69 @@ declare module '@tanstack/react-router' {
       fullPath: '/mcp'
       preLoaderRoute: typeof McpRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/_app/audit': {
+      id: '/_app/audit'
+      path: '/audit'
+      fullPath: '/audit'
+      preLoaderRoute: typeof AppAuditRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/connections': {
+      id: '/_app/connections'
+      path: '/connections'
+      fullPath: '/connections'
+      preLoaderRoute: typeof AppConnectionsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/groups': {
+      id: '/_app/groups'
+      path: '/groups'
+      fullPath: '/groups'
+      preLoaderRoute: typeof AppGroupsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/overview': {
+      id: '/_app/overview'
+      path: '/overview'
+      fullPath: '/overview'
+      preLoaderRoute: typeof AppOverviewRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/pre-provisioned-access': {
+      id: '/_app/pre-provisioned-access'
+      path: '/pre-provisioned-access'
+      fullPath: '/pre-provisioned-access'
+      preLoaderRoute: typeof AppPreProvisionedAccessRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/preferences': {
+      id: '/_app/preferences'
+      path: '/preferences'
+      fullPath: '/preferences'
+      preLoaderRoute: typeof AppPreferencesRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/service-accounts': {
+      id: '/_app/service-accounts'
+      path: '/service-accounts'
+      fullPath: '/service-accounts'
+      preLoaderRoute: typeof AppServiceAccountsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/sso': {
+      id: '/_app/sso'
+      path: '/sso'
+      fullPath: '/sso'
+      preLoaderRoute: typeof AppSsoRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/users': {
+      id: '/_app/users'
+      path: '/users'
+      fullPath: '/users'
+      preLoaderRoute: typeof AppUsersRouteImport
+      parentRoute: typeof AppRoute
     }
     '/api/admin': {
       id: '/api/admin'
@@ -204,6 +415,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/oauth/consent'
       preLoaderRoute: typeof OauthConsentRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/_app/connections_/new': {
+      id: '/_app/connections_/new'
+      path: '/connections/new'
+      fullPath: '/connections/new'
+      preLoaderRoute: typeof AppConnectionsNewRouteImport
+      parentRoute: typeof AppRoute
     }
     '/api/auth/$': {
       id: '/api/auth/$'
@@ -233,11 +451,50 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiUpstreamOauthStartRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_app/connections_/$connectionId/configure': {
+      id: '/_app/connections_/$connectionId/configure'
+      path: '/connections/$connectionId/configure'
+      fullPath: '/connections/$connectionId/configure'
+      preLoaderRoute: typeof AppConnectionsConnectionIdConfigureRouteImport
+      parentRoute: typeof AppRoute
+    }
   }
 }
 
+interface AppRouteChildren {
+  AppAuditRoute: typeof AppAuditRoute
+  AppConnectionsRoute: typeof AppConnectionsRoute
+  AppGroupsRoute: typeof AppGroupsRoute
+  AppOverviewRoute: typeof AppOverviewRoute
+  AppPreProvisionedAccessRoute: typeof AppPreProvisionedAccessRoute
+  AppPreferencesRoute: typeof AppPreferencesRoute
+  AppServiceAccountsRoute: typeof AppServiceAccountsRoute
+  AppSsoRoute: typeof AppSsoRoute
+  AppUsersRoute: typeof AppUsersRoute
+  AppConnectionsNewRoute: typeof AppConnectionsNewRoute
+  AppConnectionsConnectionIdConfigureRoute: typeof AppConnectionsConnectionIdConfigureRoute
+}
+
+const AppRouteChildren: AppRouteChildren = {
+  AppAuditRoute: AppAuditRoute,
+  AppConnectionsRoute: AppConnectionsRoute,
+  AppGroupsRoute: AppGroupsRoute,
+  AppOverviewRoute: AppOverviewRoute,
+  AppPreProvisionedAccessRoute: AppPreProvisionedAccessRoute,
+  AppPreferencesRoute: AppPreferencesRoute,
+  AppServiceAccountsRoute: AppServiceAccountsRoute,
+  AppSsoRoute: AppSsoRoute,
+  AppUsersRoute: AppUsersRoute,
+  AppConnectionsNewRoute: AppConnectionsNewRoute,
+  AppConnectionsConnectionIdConfigureRoute:
+    AppConnectionsConnectionIdConfigureRoute,
+}
+
+const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AppRoute: AppRouteWithChildren,
   HealthRoute: HealthRoute,
   McpRoute: McpRoute,
   ApiAdminRoute: ApiAdminRoute,

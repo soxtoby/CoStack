@@ -33,7 +33,10 @@ export async function upstreamOAuthHandler(
         { status: 400 },
       )
     const completed = await oauth.finishOAuth(state, code)
-    return Response.json({ connected: true, ...completed })
+    const destination = new URL('/connections', url)
+    destination.searchParams.set('connection', completed.connectionId)
+    destination.searchParams.set('oauth', 'connected')
+    return Response.redirect(destination, 303)
   }
   return new Response('Not found', { status: 404 })
 }

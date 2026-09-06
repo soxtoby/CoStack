@@ -56,7 +56,7 @@ textarea::placeholder {
 .app {
   min-height: 100vh;
   display: grid;
-  grid-template-columns: 250px 1fr;
+  grid-template-columns: 190px minmax(0, 1fr);
 }
 .app > aside {
   height: 100vh;
@@ -111,7 +111,8 @@ nav {
   display: grid;
   gap: 3px;
 }
-nav button {
+nav a {
+  text-decoration: none;
   border: 0;
   background: none;
   color: var(--muted);
@@ -120,14 +121,14 @@ nav button {
   grid-template-columns: 31px 1fr;
   text-align: left;
 }
-nav button code {
+nav a code {
   font:
     12px / 1.5 DM Mono,
     monospace;
   color: var(--muted);
 }
-nav button.active,
-nav button:hover {
+nav a.active,
+nav a:hover {
   background: #202720;
   color: #fff;
   box-shadow: inset 2px 0 var(--acid);
@@ -186,7 +187,7 @@ aside footer button {
   letter-spacing: 0.1em;
 }
 .page {
-  max-width: 1160px;
+  max-width: 1400px;
   animation: arrive 0.3s;
 }
 .heading {
@@ -336,21 +337,22 @@ legend {
   color: var(--muted);
 }
 .connection-grid {
-  display: grid;
-  grid-template-columns: 300px 1fr;
+  display: block;
   border: 1px solid var(--line);
-  min-height: 560px;
+  min-height: 240px;
 }
 .connection-list {
-  border-right: 1px solid var(--line);
+  display: flex;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--line);
   padding: 8px;
 }
 .connection-list > button {
-  width: 100%;
+  flex: 0 0 170px;
   display: grid;
-  gap: 8px;
+  gap: 4px;
   text-align: left;
-  padding: 15px;
+  padding: 10px 12px;
   border: 0;
   background: none;
   color: inherit;
@@ -376,7 +378,7 @@ legend {
   overflow-wrap: anywhere;
 }
 .connection-detail {
-  padding: 28px;
+  padding: 16px;
   min-width: 0;
 }
 .empty {
@@ -402,6 +404,51 @@ legend {
   gap: 8px;
   flex-wrap: wrap;
 }
+.connection-availability {
+  margin-top: 20px;
+  padding: 16px;
+  border: 1px solid #59685d;
+  background: #202b23;
+  display: flex;
+  gap: 20px;
+  align-items: center;
+}
+.connection-availability p {
+  margin: 6px 0 0;
+  color: var(--muted);
+}
+.connection-availability button {
+  flex-shrink: 0;
+}
+.form-fields {
+  overflow-y: auto;
+  min-height: 0;
+  flex: 1;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.form-footer {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 16px 24px;
+  border-top: 1px solid #819786;
+  background: #26352a;
+}
+.form-footer > span {
+  margin-right: auto;
+  color: #c2cec5;
+  font-size: 13px;
+}
+.form-footer > .error {
+  width: 100%;
+  margin: 0;
+}
 .connection-detail h3 {
   font:
     700 14px / 1.5 Manrope,
@@ -413,6 +460,59 @@ legend {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
+}
+.policy-editor {
+  display: grid;
+  gap: 16px;
+  border-top: 1px solid var(--line);
+  padding-top: 20px;
+}
+.policy-editor h3,
+.policy-editor p {
+  margin: 0;
+}
+.policy-editor p,
+.policy-editor small {
+  color: var(--muted);
+}
+.policy-definitions {
+  display: grid;
+  gap: 12px;
+  border: 1px solid var(--line);
+  padding: 12px;
+}
+.policy-definitions .toolbar {
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 0;
+  color: inherit;
+}
+.policy-definitions .policy-rule {
+  margin: 0;
+}
+.policy-tools {
+  display: grid;
+  gap: 0;
+  border: 1px solid var(--line);
+}
+.policy-tools article {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 140px 190px;
+  gap: 12px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--line);
+  align-items: center;
+  overflow-wrap: anywhere;
+}
+.policy-tools article p {
+  margin: 6px 0;
+}
+.policy-rule {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: end;
+  margin-bottom: 12px;
 }
 .policy {
   font-size: 13px;
@@ -455,11 +555,130 @@ legend {
 }
 .account-cards article {
   border: 1px solid var(--line);
-  padding: 13px;
+  padding: 8px 12px;
   display: grid;
-  grid-template-columns: 1fr auto auto;
+  grid-template-columns: minmax(160px, 1fr) auto auto auto auto;
   align-items: center;
-  gap: 14px;
+  gap: 8px;
+}
+.account-cards button {
+  min-height: 36px;
+  padding: 6px 10px;
+  font-size: 13px;
+}
+.account-cards small {
+  overflow-wrap: anywhere;
+}
+.primary,
+.secondary {
+  text-decoration: none;
+}
+.config-tabs {
+  display: flex;
+  gap: 24px;
+  border-bottom: 1px solid var(--line);
+}
+.config-tabs a {
+  color: var(--muted);
+  text-decoration: none;
+  padding: 10px 0;
+}
+.config-tabs a[aria-current='page'] {
+  color: var(--acid);
+  border-bottom: 2px solid var(--acid);
+}
+.configuration-page {
+  padding-top: 20px;
+}
+.configuration-page h1 {
+  font-size: 24px;
+  margin: 12px 0;
+}
+.config-actions {
+  margin-block: 12px;
+}
+.configuration-editor {
+  height: calc(100dvh - 270px);
+  min-height: 280px;
+  border: 1px solid #59685d;
+}
+.configuration-editor .action-form.scroll-body {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  gap: 0;
+}
+.configuration-fields:not([hidden]) {
+  display: grid;
+  gap: 16px;
+  max-width: 760px;
+}
+.configuration-editor .policy-editor {
+  padding-top: 0;
+  border: 0;
+  gap: 12px;
+}
+.configuration-editor .form-fields {
+  padding: 16px;
+}
+.tool-browser.has-selection {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 280px;
+  gap: 16px;
+}
+.tool-browser.has-selection .policy-tools article {
+  grid-template-columns: minmax(0, 1fr) 170px;
+}
+.tool-browser.has-selection .tool-effect {
+  display: none;
+}
+.tool-select {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  min-width: 0;
+  padding: 6px 0;
+  color: inherit;
+  background: none;
+  border: 0;
+  text-align: left;
+}
+.tool-select b {
+  flex-shrink: 0;
+  max-width: 65%;
+  overflow-wrap: anywhere;
+}
+.tool-select span {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--muted);
+  font-size: 13px;
+}
+.policy-tools .field select {
+  padding: 6px 8px;
+  font-size: 13px;
+  min-height: 34px;
+}
+.policy-tools article.selected {
+  background: #29392a;
+  box-shadow: inset 2px 0 var(--acid);
+}
+.tool-description {
+  padding: 12px;
+  border: 1px solid var(--line);
+  max-height: 55vh;
+  overflow: auto;
+  overflow-wrap: anywhere;
+}
+.tool-description p {
+  white-space: pre-wrap;
+}
+.tool-description .toolbar {
+  gap: 8px;
 }
 .account-cards small {
   display: block;
@@ -935,6 +1154,27 @@ fieldset {
   }
 }
 @media (max-width: 850px) {
+  .tool-browser.has-selection {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .tool-description {
+    order: -1;
+    max-height: 200px;
+  }
+  .account-cards article {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .policy-tools article,
+  .tool-browser.has-selection .policy-tools article {
+    grid-template-columns: minmax(0, 1fr) 160px;
+  }
+  .tool-effect {
+    display: none;
+  }
+  .policy-tools article,
+  .policy-rule {
+    grid-template-columns: minmax(0, 1fr);
+  }
   .app {
     grid-template-columns: 1fr;
   }
@@ -953,7 +1193,7 @@ fieldset {
     overflow: auto;
     margin-top: 14px;
   }
-  nav button {
+  nav a {
     min-width: max-content;
   }
   .app > main {
@@ -989,6 +1229,18 @@ fieldset {
   }
 }
 @media (max-width: 560px) {
+  .connection-availability {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .connection-editor > header,
+  .form-fields,
+  .form-footer {
+    padding: 16px;
+  }
+  .form-footer > span {
+    display: none;
+  }
   .registry-search {
     grid-template-columns: minmax(0, 1fr);
   }

@@ -6,6 +6,7 @@ import { migrate } from '../database/migrate'
 import { ConnectionManager } from './manager'
 import { UpstreamOAuth } from './oauth'
 import { SecretVault } from './secrets'
+import { upstreamOAuthHandler } from './oauth-handler'
 import type { UpstreamClient } from './upstream'
 
 const database = await PGlite.create()
@@ -36,6 +37,7 @@ const manager = new ConnectionManager(pool, vault, () =>
 )
 let tokenRequest = new URLSearchParams()
 let oauthBase = ''
+let registrations = 0
 const oauthServer: Bun.Server<undefined> = Bun.serve({
   port: 0,
   async fetch(request) {
@@ -51,14 +53,29 @@ const oauthServer: Bun.Server<undefined> = Bun.serve({
         issuer: oauthBase,
         authorization_endpoint: `${oauthBase}authorize`,
         token_endpoint: `${oauthBase}token`,
+        registration_endpoint: `${oauthBase}register`,
         response_types_supported: ['code'],
         code_challenge_methods_supported: ['S256'],
-        token_endpoint_auth_methods_supported: ['client_secret_basic'],
+        token_endpoint_auth_methods_supported: ['client_secret_basic', 'none'],
+      })
+    }
+    if (url.pathname === '/register') {
+      const metadata = await request.json()
+      expect(metadata.token_endpoint_auth_method).toBe('none')
+      expect(metadata.redirect_uris).toEqual([
+        'http://gateway.test/api/upstream-oauth/callback',
+      ])
+      registrations++
+      return Response.json({
+        ...metadata,
+        client_id: `dynamic-${registrations}`,
       })
     }
     if (url.pathname === '/token') {
       tokenRequest = new URLSearchParams(await request.text())
-      expect(request.headers.get('authorization')).toStartWith('Basic ')
+      if (tokenRequest.get('client_id')?.startsWith('dynamic-')) {
+        expect(request.headers.has('authorization')).toBe(false)
+      } else expect(request.headers.get('authorization')).toStartWith('Basic ')
       return Response.json({
         access_token: 'access',
         refresh_token: 'refresh',
@@ -107,6 +124,104 @@ afterAll(async () => {
 })
 
 describe('upstream OAuth', () => {
+  test('registers automatically without a configured client and keeps registration scoped to the Account', async () => {
+    const connection = await manager.create({
+      organizationId: 'org',
+      displayName: 'Automatic OAuth',
+      transport: { kind: 'streamable_http', url: `${oauthBase}mcp` },
+      groupIds: [],
+      policies: [],
+      state: 'disabled',
+    })
+    const account = await manager.addAccount({
+      connectionId: connection.id,
+      kind: 'personal',
+      ownerUserId: 'user',
+      displayName: 'Automatic',
+    })
+    const oauth = new UpstreamOAuth(pool, vault, 'http://gateway.test')
+    const started = await oauth.start(account.id, 'user')
+    const authorization = new URL(started.authorizationUrl)
+    const clientId = authorization.searchParams.get('client_id')!
+    expect(clientId).toStartWith('dynamic-')
+    expect(authorization.searchParams.get('code_challenge_method')).toBe('S256')
+    const before = await (await oauth.provider(account.id)).tokens()
+    expect(before).toBeUndefined()
+    const callback = await upstreamOAuthHandler(
+      new Request(
+        `http://gateway.test/api/upstream-oauth/callback?state=${authorization.searchParams.get('state')}&code=test-code`,
+      ),
+      {
+        startOAuth: (id, principal) => oauth.start(id, principal),
+        finishOAuth: (state, code) => oauth.finish(state, code),
+      },
+    )
+    expect(callback.status).toBe(303)
+    expect(new URL(callback.headers.get('location')!).pathname).toBe(
+      '/connections',
+    )
+    expect(
+      new URL(callback.headers.get('location')!).searchParams.get('connection'),
+    ).toBe(connection.id)
+    expect(tokenRequest.get('client_id')).toBe(clientId)
+    expect(tokenRequest.get('code_verifier')).toBeTruthy()
+    const provider = await oauth.provider(account.id)
+    expect((await provider.clientInformation())?.client_id).toBe(clientId)
+    expect((await provider.tokens())?.access_token).toBe('access')
+    const previousUrl = process.env.APPLICATION_URL
+    process.env.APPLICATION_URL = 'http://gateway.test'
+    let connections = 0
+    const connectedManager = new ConnectionManager(
+      pool,
+      vault,
+      async (_config, secrets, authProvider) => {
+        expect(secrets).toEqual({})
+        expect((await authProvider?.clientInformation())?.client_id).toBe(
+          clientId,
+        )
+        expect((await authProvider?.tokens())?.access_token).toBe('access')
+        connections++
+        return fakeUpstream
+      },
+    )
+    if (previousUrl === undefined) delete process.env.APPLICATION_URL
+    else process.env.APPLICATION_URL = previousUrl
+    try {
+      await connectedManager.refreshConnection(connection.id, 'user')
+      await connectedManager.setEnabled(connection.id, true, 'user')
+      await connectedManager.callAccountTool(
+        connection.id,
+        account.id,
+        'read_issue',
+        {},
+      )
+      expect(connections).toBe(3)
+    } finally {
+      await connectedManager.close()
+    }
+    const other = await manager.addAccount({
+      connectionId: connection.id,
+      kind: 'personal',
+      ownerUserId: 'other',
+      displayName: 'Other',
+    })
+    expect(
+      await (await oauth.provider(other.id)).clientInformation(),
+    ).toBeUndefined()
+    await expect(oauth.start(account.id, 'other')).rejects.toThrow(
+      'another User',
+    )
+    await expect(
+      oauth.finish(authorization.searchParams.get('state')!, 'test-code'),
+    ).rejects.toThrow('invalid or expired')
+    const encrypted = await pool.query(
+      'SELECT secret_ciphertext FROM mcp_accounts WHERE id=$1',
+      [account.id],
+    )
+    expect(
+      new TextDecoder().decode(encrypted.rows[0].secret_ciphertext),
+    ).not.toContain(clientId)
+  })
   test('authorizes a Personal Account with discovery, state, PKCE, and encrypted tokens', async () => {
     const connection = await manager.create({
       organizationId: 'org',

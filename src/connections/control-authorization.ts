@@ -8,6 +8,7 @@ export function controlActionAccess(action: string): ControlAccess | undefined {
     [
       'create-connection',
       'edit-connection',
+      'set-tool-policies',
       'clone-connection',
       'set-enabled',
       'refresh-connection',

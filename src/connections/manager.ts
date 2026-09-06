@@ -10,6 +10,7 @@ import type {
   ConnectionInput,
   DiscoveredTool,
   OAuthClientConfig,
+  ToolPolicy,
   TransportConfig,
 } from './types'
 import type { Pool, PoolClient } from 'pg'
@@ -23,6 +24,34 @@ type Connect = (
 export class RevisionConflictError extends Error {}
 
 export class ConnectionManager {
+  async setToolPolicies(
+    id: string,
+    revision: number,
+    policies: Array<ToolPolicy>,
+  ) {
+    for (const policy of policies) {
+      validateGlob(policy.pattern)
+      if (!['allow', 'block', 'require_approval'].includes(policy.effect))
+        throw new Error('Invalid policy action')
+    }
+    await this.transaction(async (database) => {
+      const result = await database.query(
+        'UPDATE mcp_connections SET revision=revision+1,updated_at=now() WHERE id=$1 AND revision=$2',
+        [id, revision],
+      )
+      if (result.rowCount !== 1)
+        throw new RevisionConflictError('Connection changed; reload and retry')
+      await database.query('DELETE FROM tool_policies WHERE connection_id=$1', [
+        id,
+      ])
+      for (const policy of policies)
+        await database.query(
+          'INSERT INTO tool_policies(id,connection_id,pattern,effect) VALUES($1,$2,$3,$4)',
+          [randomUUID(), id, policy.pattern, policy.effect],
+        )
+    })
+    return { revision: revision + 1 }
+  }
   private readonly clients = new Map<string, Promise<UpstreamClient>>()
   readonly oauth: UpstreamOAuth
 
@@ -352,10 +381,10 @@ export class ConnectionManager {
         nonce: new Uint8Array(row.secret_nonce),
         version: row.secret_format_version as number,
       })
+    const hasOAuth = Boolean(row.has_oauth || secrets.oauthTokens)
     delete secrets.oauthTokens
-    const provider = row.has_oauth
-      ? await this.oauth.provider(accountId)
-      : undefined
+    delete secrets.oauthClient
+    const provider = hasOAuth ? await this.oauth.provider(accountId) : undefined
     const client = await this.connect(config, secrets, provider)
     try {
       return await withTimeout((signal) => client.listTools(signal))
@@ -433,11 +462,11 @@ export class ConnectionManager {
         version: row.secret_format_version as number,
       })
     }
+    const hasOAuth = Boolean(row.has_oauth || secrets.oauthTokens)
     delete secrets.oauthTokens
+    delete secrets.oauthClient
     const provider =
-      row.has_oauth && accountId
-        ? await this.oauth.provider(accountId)
-        : undefined
+      hasOAuth && accountId ? await this.oauth.provider(accountId) : undefined
     return this.connect(
       row.transport_config as TransportConfig,
       secrets,

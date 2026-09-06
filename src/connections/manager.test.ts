@@ -53,6 +53,76 @@ afterAll(async () => {
 })
 
 describe('ConnectionManager', () => {
+  test('saves policy edits without rediscovery or changing transport, Groups, or tool inventory', async () => {
+    let connectionId: string | undefined
+    let discoveries = 0
+    const local = new ConnectionManager(pool, vault, () => {
+      discoveries++
+      return Promise.resolve(fake)
+    })
+    try {
+      const connection = await local.create({
+        organizationId: 'org',
+        displayName: 'Policy editor',
+        transport: {
+          kind: 'streamable_http',
+          url: 'https://mcp.example.test/policies',
+        },
+        groupIds: ['group'],
+        policies: [{ pattern: '*', effect: 'block' }],
+        state: 'disabled',
+      })
+      connectionId = connection.id
+      await local.setToolPolicies(connection.id, connection.revision, [
+        { pattern: 'read_issue', effect: 'allow' },
+      ])
+      expect(discoveries).toBe(1)
+      const row = (
+        await pool.query(
+          'SELECT transport_config,state,revision FROM mcp_connections WHERE id=$1',
+          [connection.id],
+        )
+      ).rows[0]
+      expect(row.transport_config.url).toBe('https://mcp.example.test/policies')
+      expect(row.state).toBe('disabled')
+      expect(row.revision).toBe(2)
+      expect(
+        (
+          await pool.query(
+            'SELECT group_id FROM connection_groups WHERE connection_id=$1',
+            [connection.id],
+          )
+        ).rows,
+      ).toEqual([{ group_id: 'group' }])
+      expect(
+        (
+          await pool.query(
+            'SELECT name FROM connection_tools WHERE connection_id=$1',
+            [connection.id],
+          )
+        ).rows,
+      ).toEqual([{ name: 'read_issue' }])
+      await expect(
+        local.setToolPolicies(connection.id, 1, [
+          { pattern: '*', effect: 'block' },
+        ]),
+      ).rejects.toBeInstanceOf(RevisionConflictError)
+      expect(
+        (
+          await pool.query(
+            'SELECT pattern,effect FROM tool_policies WHERE connection_id=$1',
+            [connection.id],
+          )
+        ).rows,
+      ).toEqual([{ pattern: 'read_issue', effect: 'allow' }])
+    } finally {
+      await local.close()
+      if (connectionId)
+        await pool.query('DELETE FROM mcp_connections WHERE id=$1', [
+          connectionId,
+        ])
+    }
+  })
   test('validates before save, discovers tools, and protects revisions', async () => {
     const created = await manager.create({
       organizationId: 'org',
