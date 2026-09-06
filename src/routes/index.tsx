@@ -297,24 +297,16 @@ function ConnectionForm(p: {
       go={async (f) => {
         const policies = parsePolicies(String(f.get('policies') || '* = block'))
         const transport =
-          kind === 'streamable_http'
+          p.initial?.transport ??
+          (kind === 'streamable_http'
             ? { kind, url: String(f.get('url')) }
             : {
                 kind,
                 command: String(f.get('command')),
-                args: p.initial
-                  ? JSON.parse(String(f.get('args') || '[]'))
-                  : String(f.get('args') || '')
-                      .split(/\s+/)
-                      .filter(Boolean),
-              }
-        if (
-          transport.kind === 'stdio' &&
-          (!Array.isArray(transport.args) ||
-            !transport.args.every((arg: unknown) => typeof arg === 'string'))
-        ) {
-          throw new Error('Arguments must be a JSON array of strings.')
-        }
+                args: String(f.get('args') || '')
+                  .split(/\s+/)
+                  .filter(Boolean),
+              })
         const result = await controlAct('create-connection', {
           input: {
             organizationId: p.organizationId,
@@ -342,65 +334,69 @@ function ConnectionForm(p: {
           <input name="namespace" placeholder="derived_from_name" />
         </Field>
       </div>
-      <div className="segmented">
-        <button
-          type="button"
-          className={kind === 'streamable_http' ? 'on' : ''}
-          onClick={() => setKind('streamable_http')}
-        >
-          Streamable HTTP
-        </button>
-        <button
-          type="button"
-          className={kind === 'stdio' ? 'on' : ''}
-          onClick={() => setKind('stdio')}
-        >
-          STDIO
-        </button>
-      </div>
-      {kind === 'streamable_http' ? (
-        <Field label="HTTPS URL">
-          <input
-            name="url"
-            type="url"
-            required
-            placeholder="https://mcp.example.com/mcp"
-            defaultValue={
-              p.initial?.transport.kind === 'streamable_http'
-                ? p.initial.transport.url
-                : undefined
-            }
-          />
-        </Field>
-      ) : (
-        <div className="form-grid">
-          <Field label="Command">
-            <input
-              name="command"
-              required
-              placeholder="bunx or dotnet"
-              defaultValue={
-                p.initial?.transport.kind === 'stdio'
-                  ? p.initial.transport.command
-                  : undefined
-              }
-            />
-          </Field>
-          <Field label={p.initial ? 'Arguments (JSON array)' : 'Arguments'}>
-            <input
-              name="args"
-              placeholder={
-                p.initial ? '["@scope/server@1.2.3"]' : '@scope/server@1.2.3'
-              }
-              defaultValue={
-                p.initial?.transport.kind === 'stdio'
-                  ? JSON.stringify(p.initial.transport.args ?? [])
-                  : undefined
-              }
-            />
-          </Field>
+      {p.initial ? (
+        <div className="registry-transport">
+          <b>
+            {p.initial.transport.kind === 'streamable_http'
+              ? 'Streamable HTTP'
+              : 'STDIO'}{' '}
+            · From registry
+          </b>
+          {p.initial.transport.kind === 'streamable_http' ? (
+            <p>
+              <code>{p.initial.transport.url}</code>
+            </p>
+          ) : (
+            <p>
+              <code>
+                {[
+                  p.initial.transport.command,
+                  ...(p.initial.transport.args ?? []),
+                ].join(' ')}
+              </code>
+            </p>
+          )}
+          <small>Uses the transport settings published by this server.</small>
         </div>
-      )}
+      ) : (
+        <>
+          <div className="segmented">
+            <button
+              type="button"
+              className={kind === 'streamable_http' ? 'on' : ''}
+              onClick={() => setKind('streamable_http')}
+            >
+              Streamable HTTP
+            </button>
+            <button
+              type="button"
+              className={kind === 'stdio' ? 'on' : ''}
+              onClick={() => setKind('stdio')}
+            >
+              STDIO
+            </button>
+          </div>
+          {kind === 'streamable_http' ? (
+            <Field label="HTTPS URL">
+              <input
+                name="url"
+                type="url"
+                required
+                placeholder="https://mcp.example.com/mcp"
+              />
+            </Field>
+          ) : (
+            <div className="form-grid">
+              <Field label="Command">
+                <input name="command" required placeholder="bunx or dotnet" />
+              </Field>
+              <Field label="Arguments">
+                <input name="args" placeholder="@scope/server@1.2.3" />
+              </Field>
+            </div>
+          )}
+        </>
+      )}{' '}
       <GroupChecks groups={p.data.groups ?? []} />
       <Field label="Tool policies, one pattern = effect per line">
         <textarea
@@ -786,7 +782,6 @@ function RegistryPanel(p: {
     p.control.registrySources[0]?.id ?? '',
   )
   const [query, setQuery] = useState('')
-  const [search, setSearch] = useState('')
   const [cursor, setCursor] = useState<string>()
   const [results, setResults] = useState<Array<RegistryServer>>([])
   const [nextCursor, setNextCursor] = useState<string>()
@@ -798,24 +793,27 @@ function RegistryPanel(p: {
     let cancelled = false
     setLoading(true)
     setError('')
-    controlAct('browse-registry', { sourceId, search, cursor })
-      .then((result) => {
-        if (cancelled) return
-        setResults((previous) =>
-          cursor ? [...previous, ...result.servers] : result.servers,
-        )
-        setNextCursor(result.metadata?.nextCursor)
-      })
-      .catch((e: Error) => {
-        if (!cancelled) setError(e.message)
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false)
-      })
+    const timer = setTimeout(() => {
+      controlAct('browse-registry', { sourceId, search: query.trim(), cursor })
+        .then((result) => {
+          if (cancelled) return
+          setResults((previous) =>
+            cursor ? [...previous, ...result.servers] : result.servers,
+          )
+          setNextCursor(result.metadata?.nextCursor)
+        })
+        .catch((e: Error) => {
+          if (!cancelled) setError(e.message)
+        })
+        .finally(() => {
+          if (!cancelled) setLoading(false)
+        })
+    }, 300)
     return () => {
       cancelled = true
+      clearTimeout(timer)
     }
-  }, [sourceId, search, cursor, retry])
+  }, [sourceId, query, cursor, retry])
   if (prefill)
     return (
       <section className="registry">
@@ -827,9 +825,9 @@ function RegistryPanel(p: {
           {prefill.registry?.version}
         </p>
         <p>
-          Review the settings, then save. New connections start disabled with
-          tools blocked. After saving, configure Accounts and Tool Policies,
-          then enable the connection.
+          The registry supplies the connection settings. Choose a local name and
+          Group access, then save. New connections start disabled. After saving,
+          configure Accounts and Tool Policies, then enable the connection.
         </p>
         <ConnectionForm
           data={p.data}
@@ -844,18 +842,9 @@ function RegistryPanel(p: {
       <h2>Browse MCP registry</h2>
       <p>
         Search by part of a server name, or browse the list. Select a server to
-        review its connection settings.
+        add it using its published connection settings.
       </p>
-      <form
-        className="registry-search"
-        onSubmit={(e) => {
-          e.preventDefault()
-          setResults([])
-          setCursor(undefined)
-          setSearch(query)
-          setRetry((value) => value + 1)
-        }}
-      >
+      <div className="registry-search">
         <Field label="Registry">
           <select
             value={sourceId}
@@ -864,6 +853,7 @@ function RegistryPanel(p: {
               setSourceId(e.target.value)
               setCursor(undefined)
               setResults([])
+              setNextCursor(undefined)
             }}
           >
             {p.control.registrySources.map((s) => (
@@ -877,14 +867,17 @@ function RegistryPanel(p: {
           <input
             value={query}
             disabled={importing}
-            onChange={(e) => setQuery(e.target.value)}
+            type="search"
+            onChange={(e) => {
+              setQuery(e.target.value)
+              setCursor(undefined)
+              setResults([])
+              setNextCursor(undefined)
+            }}
             placeholder="e.g. github or filesystem"
           />
         </Field>
-        <button className="primary" disabled={loading || importing}>
-          Search
-        </button>
-      </form>
+      </div>
       {error && (
         <div role="alert">
           <p className="error">{error}</p>

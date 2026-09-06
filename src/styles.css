@@ -486,7 +486,7 @@ legend {
 }
 .registry-search {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) auto;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
   align-items: end;
   gap: 12px;
   margin-block: 20px;
@@ -495,6 +495,17 @@ legend {
   display: grid;
   gap: 12px;
   margin-bottom: 16px;
+}
+.registry-transport {
+  border: 1px solid var(--line);
+  padding: 16px;
+  overflow-wrap: anywhere;
+}
+.registry-transport p {
+  margin: 8px 0;
+}
+.registry-transport small {
+  color: var(--muted);
 }
 .registry-results article {
   display: flex;
