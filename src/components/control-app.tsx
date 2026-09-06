@@ -107,18 +107,18 @@ export function App() {
     <div className="app">
       <aside>
         <Logo />
+        <div className="org">{data.organization?.display_name}</div>
         <div className="online">
           <i /> Gateway online
         </div>
         <nav>
-          {links.map(([id, label], i) => (
+          {links.map(([id, label]) => (
             <Link
               className={page === id ? 'active' : ''}
               aria-current={page === id ? 'page' : undefined}
               to={pagePaths[id as keyof typeof pagePaths]}
               key={id}
             >
-              <code>{String(i + 1).padStart(2, '0')}</code>
               {label}
             </Link>
           ))}
@@ -138,10 +138,6 @@ export function App() {
         </footer>
       </aside>
       <main>
-        <header>
-          {data.organization?.display_name}
-          <code>CONTROL / {page.toUpperCase()}</code>
-        </header>
         {links.some(([id]) => id === page) ? (
           <ControlContext.Provider value={{ data, reload }}>
             <Outlet />
@@ -237,18 +233,18 @@ export function Connections({ data }: { data: Data }) {
   if (!control) return <div className="loading">Loading MCP Connections</div>
   return (
     <Page
-      eyebrow="Gateway routing"
       title="MCP Connections"
-      intro="Choose a connection to manage your Accounts and sign in."
+      actions={
+        <>
+          <span>{control.connections.length} configured</span>
+          {canConnections && (
+            <Link className="primary" to="/connections/new">
+              Add connection
+            </Link>
+          )}
+        </>
+      }
     >
-      <div className="toolbar">
-        <span>{control.connections.length} configured</span>
-        {canConnections && (
-          <Link className="primary" to="/connections/new">
-            Add connection
-          </Link>
-        )}
-      </div>{' '}
       <div className="connection-grid">
         <div className="connection-list">
           {control.connections.map((c) => (
@@ -1065,11 +1061,10 @@ export function Preferences() {
   )
   if (!data) return null
   return (
-    <Page
-      eyebrow="Personal settings"
-      title="Approval Method"
-      intro="Choose how approval-required tools ask before execution."
-    >
+    <Page title="Approval Method">
+      <p className="note">
+        Choose how approval-required tools ask before execution.
+      </p>
       <div className="choice-grid">
         {(['gateway_enforced', 'client_managed'] as const).map((method) => (
           <button
@@ -1112,35 +1107,46 @@ export function Audit() {
   if (!data) return null
   return (
     <Page
-      eyebrow="Accountability"
       title="Audit"
-      intro="Metadata only. CoStack never stores tool arguments or results."
+      actions={
+        <>
+          {data.authorization.administrator && (
+            <label className="field">
+              <span>Retention</span>
+              <select
+                value={data.auditRetentionDays}
+                onChange={(e) =>
+                  controlAct('set-audit-retention', {
+                    days: Number(e.target.value),
+                  }).then(() =>
+                    setData({
+                      ...data,
+                      auditRetentionDays: Number(e.target.value),
+                    }),
+                  )
+                }
+              >
+                {[30, 90, 180, 365].map((x) => (
+                  <option key={x} value={x}>
+                    {x} days
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          <a
+            className="primary"
+            href={`/api/control?download=audit${query ? `&${query}` : ''}`}
+          >
+            Download JSONL <b>↓</b>
+          </a>
+        </>
+      }
     >
+      <p className="note">
+        Metadata only. CoStack never stores tool arguments or results.
+      </p>
       <div className="toolbar">
-        {data.authorization.administrator && (
-          <label className="field">
-            <span>Retention</span>
-            <select
-              value={data.auditRetentionDays}
-              onChange={(e) =>
-                controlAct('set-audit-retention', {
-                  days: Number(e.target.value),
-                }).then(() =>
-                  setData({
-                    ...data,
-                    auditRetentionDays: Number(e.target.value),
-                  }),
-                )
-              }
-            >
-              {[30, 90, 180, 365].map((x) => (
-                <option key={x} value={x}>
-                  {x} days
-                </option>
-              ))}
-            </select>
-          </label>
-        )}
         <form
           className="audit-filters"
           onSubmit={(e) => {
@@ -1178,12 +1184,6 @@ export function Audit() {
           </select>
           <button className="secondary">Apply filters</button>
         </form>
-        <a
-          className="primary"
-          href={`/api/control?download=audit${query ? `&${query}` : ''}`}
-        >
-          Download JSONL <b>↓</b>
-        </a>
       </div>
       <div className="audit-table">
         {data.audit.map((row, i) => (
@@ -1223,11 +1223,7 @@ async function upstreamOAuthStart(accountId: string) {
 }
 export function Overview({ data }: { data: Data }) {
   return (
-    <Page
-      eyebrow="System overview"
-      title="Identity control"
-      intro="People and services with access to this gateway."
-    >
+    <Page title="Identity control">
       <div className="metrics">
         <Metric
           n={data.users?.filter((x) => !x.disabled_at).length ?? 0}
@@ -1267,11 +1263,7 @@ export function Overview({ data }: { data: Data }) {
 }
 export function Users({ data, reload }: View) {
   return (
-    <Page
-      eyebrow="Human principals"
-      title="Users"
-      intro="Identity comes from Better Auth. CoStack controls status and Groups."
-    >
+    <Page title="Users">
       <Rows>
         {data.users?.map((u) => (
           <article key={u.id}>
@@ -1306,11 +1298,11 @@ export function Users({ data, reload }: View) {
 }
 export function Access({ data, reload }: View) {
   return (
-    <Page
-      eyebrow="Before first sign-in"
-      title="Pre-provisioned access"
-      intro="Prepare Group membership for a verified SSO email. Records expire after seven days."
-    >
+    <Page title="Pre-provisioned access">
+      <p className="note">
+        Prepare Group membership for a verified SSO email. Records expire after
+        seven days.
+      </p>
       <Form
         submit="Prepare access"
         go={async (f) => {
@@ -1368,11 +1360,7 @@ export function Groups({ data, reload }: View) {
   const group = data.groups?.find((g) => g.id === selected)
   const principals = [...(data.users ?? []), ...(data.serviceAccounts ?? [])]
   return (
-    <Page
-      eyebrow="Local authorization"
-      title="Groups"
-      intro="Groups assign Capabilities and MCP Connection access."
-    >
+    <Page title="Groups">
       <Form
         compact
         submit="Create group"
@@ -1453,11 +1441,10 @@ export function Services({ data, reload }: View) {
     clientSecret: string
   }>()
   return (
-    <Page
-      eyebrow="Non-human principals"
-      title="Service Accounts"
-      intro="Credentials appear once. Store them before leaving this page."
-    >
+    <Page title="Service Accounts">
+      <p className="note">
+        Credentials appear once. Store them before leaving this page.
+      </p>
       {credential && (
         <div className="secret">
           <code>NEW CLIENT CREDENTIAL</code>
@@ -1515,11 +1502,7 @@ export function Services({ data, reload }: View) {
 export function Sso({ data, reload }: View) {
   const p = data.providers?.[0]
   return (
-    <Page
-      eyebrow="OIDC provider"
-      title="Single sign-on"
-      intro="Better Auth owns discovery, callbacks, and sessions."
-    >
+    <Page title="Single sign-on">
       <Form
         submit={p ? 'Update provider' : 'Connect provider'}
         go={async (f) => {
@@ -1663,21 +1646,20 @@ function Login({ providerId }: { providerId: string | undefined }) {
     </div>
   )
 }
-function Page(p: {
-  eyebrow: string
-  title: string
-  intro: string
-  children: ReactNode
-}) {
+function Page(p: { title: string; actions?: ReactNode; children: ReactNode }) {
   return (
     <div className="page">
-      <section className="heading">
-        <code>{p.eyebrow}</code>
-        <h1>{p.title}</h1>
-        <p>{p.intro}</p>
-      </section>
+      <PageBar title={p.title} actions={p.actions} />
       {p.children}
     </div>
+  )
+}
+function PageBar(p: { title: string; actions?: ReactNode }) {
+  return (
+    <header className="page-bar">
+      <h1>{p.title}</h1>
+      {p.actions && <div className="page-actions">{p.actions}</div>}
+    </header>
   )
 }
 function Logo() {
@@ -1909,16 +1891,16 @@ export function AddConnectionPage({ data }: View) {
   }
   return (
     <Page
-      eyebrow="Connection setup"
       title="Add connection"
-      intro="Choose a server from a registry, or enter its settings manually."
+      actions={
+        <>
+          <Link to="/connections">← Back to connections</Link>
+          <button className="secondary" onClick={() => setManual(!manual)}>
+            {manual ? 'Browse registry' : 'Enter settings manually'}
+          </button>
+        </>
+      }
     >
-      <div className="toolbar">
-        <Link to="/connections">← Back to connections</Link>
-        <button className="secondary" onClick={() => setManual(!manual)}>
-          {manual ? 'Browse registry' : 'Enter settings manually'}
-        </button>
-      </div>
       {manual ? (
         <ConnectionForm
           data={data}
@@ -1975,15 +1957,23 @@ export function ConfigureConnectionPage({
   }
   return (
     <div className="configuration-page">
-      <div className="toolbar">
-        <Link to="/connections" search={{ connection: connectionId }}>
-          ← Back to Accounts
-        </Link>
-        <Status ok={d.state === 'enabled'}>
-          {d.state === 'enabled' ? 'Available' : 'Not available'}
-        </Status>
-      </div>
-      <h1>Configure {d.display_name}</h1>
+      <PageBar
+        title={`Configure ${d.display_name}`}
+        actions={
+          <>
+            <Status ok={d.state === 'enabled'}>
+              {d.state === 'enabled' ? 'Available' : 'Not available'}
+            </Status>
+            <Link
+              className="secondary"
+              to="/connections"
+              search={{ connection: connectionId }}
+            >
+              ← Back to Accounts
+            </Link>
+          </>
+        }
+      />
       <div className="config-tabs" aria-label="Configuration sections">
         <Link
           to="/connections/$connectionId/configure"
