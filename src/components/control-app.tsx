@@ -545,7 +545,7 @@ function ConnectionDetail(p: {
 function EditConnectionForm(p: {
   changed: () => void
   tab: 'connection' | 'tools'
-  cancel: () => void
+  revert: () => void
   groups: Array<Group>
   detail: NonNullable<ControlData['detail']>
   done: () => void
@@ -558,8 +558,8 @@ function EditConnectionForm(p: {
   return (
     <div className="configuration-editor">
       <Form
-        scrollBody
-        cancel={p.cancel}
+        topActions
+        revert={p.revert}
         submit="Save changes"
         go={async (f) => {
           if (!settingsChanged) {
@@ -1760,8 +1760,8 @@ function Toggle(p: {
   )
 }
 function Form(p: {
-  scrollBody?: boolean
-  cancel?: () => void
+  topActions?: boolean
+  revert?: () => void
   disabled?: boolean
   go: (f: FormData) => Promise<void>
   submit: string
@@ -1773,8 +1773,8 @@ function Form(p: {
   const [submitting, setSubmitting] = useState(false)
   return (
     <form
-      noValidate={p.scrollBody}
-      className={`action-form ${p.compact ? 'compact' : ''} ${p.scrollBody ? 'scroll-body' : ''}`}
+      noValidate={p.topActions}
+      className={`action-form ${p.compact ? 'compact' : ''} ${p.topActions ? 'top-actions' : ''}`}
       onSubmit={async (e: FormEvent<HTMLFormElement>) => {
         e.preventDefault()
         if (submitting || p.disabled) return
@@ -1791,37 +1791,32 @@ function Form(p: {
         }
       }}
     >
-      {p.scrollBody ? (
-        <div className="form-fields">
-          {p.title && <h2>{p.title}</h2>}
-          {p.children}
-        </div>
-      ) : (
+      {!p.topActions && (
         <>
           {p.title && <h2>{p.title}</h2>}
           {p.children}
         </>
       )}
-      {p.scrollBody ? (
-        <footer className="form-footer">
+      {p.topActions ? (
+        <div className="form-actions">
           {error && (
             <p className="error" role="alert">
               {error}
             </p>
           )}
-          <span>Cancel discards these edits.</span>
+          <span>Revert discards these edits.</span>
           <button
             type="button"
             className="secondary"
             disabled={submitting}
-            onClick={p.cancel}
+            onClick={p.revert}
           >
-            Cancel
+            Revert
           </button>
           <button className="primary" disabled={submitting || p.disabled}>
             {submitting ? 'Saving…' : p.submit}
           </button>
-        </footer>
+        </div>
       ) : (
         <>
           <button className="primary" disabled={submitting || p.disabled}>
@@ -1830,6 +1825,12 @@ function Form(p: {
           </button>
           {error && <p className="error">{error}</p>}
         </>
+      )}
+      {p.topActions && (
+        <div className="form-fields">
+          {p.title && <h2>{p.title}</h2>}
+          {p.children}
+        </div>
       )}
     </form>
   )
@@ -1929,7 +1930,7 @@ export function ConfigureConnectionPage({
   const [busy, setBusy] = useState(false)
   const [saved, setSaved] = useState(false)
   const [dirty, setDirty] = useState(false)
-  const navigate = useNavigate()
+  const [editRevision, setEditRevision] = useState(0)
   const canManage =
     data.authorization?.administrator ||
     data.authorization?.capabilities.includes('manage_connections')
@@ -1939,9 +1940,6 @@ export function ConfigureConnectionPage({
   if (!control) return <p role="status">Loading connection…</p>
   const d = control.detail
   if (!d) return <p role="alert">Connection not found.</p>
-  const back = () => {
-    void navigate({ to: '/connections', search: { connection: connectionId } })
-  }
   const run = async (action: string, extra: Record<string, unknown> = {}) => {
     setBusy(true)
     setActionError('')
@@ -1992,60 +1990,66 @@ export function ConfigureConnectionPage({
           Tools ({d.tools.length})
         </Link>
       </div>
-      <div className="toolbar config-actions">
-        <span>
-          {saved ? 'Changes saved.' : 'Save changes to apply your edits.'}
-        </span>
-        {tab === 'tools' ? (
-          <button
-            className="secondary"
-            disabled={busy || dirty}
-            onClick={() => void run('refresh-connection')}
-          >
-            {busy ? 'Refreshing…' : 'Refresh tools'}
-          </button>
-        ) : (
-          <button
-            className="secondary"
-            disabled={busy || dirty}
-            onClick={() =>
-              void run('set-enabled', { enabled: d.state !== 'enabled' })
-            }
-          >
-            {d.state === 'enabled' ? 'Pause access' : 'Make available'}
-          </button>
+      <div className="configuration-content">
+        <div className="toolbar config-actions">
+          <span>
+            {saved ? 'Changes saved.' : 'Save changes to apply your edits.'}
+          </span>
+          {tab === 'tools' ? (
+            <button
+              className="secondary"
+              disabled={busy || dirty}
+              onClick={() => void run('refresh-connection')}
+            >
+              {busy ? 'Refreshing…' : 'Refresh tools'}
+            </button>
+          ) : (
+            <button
+              className="secondary"
+              disabled={busy || dirty}
+              onClick={() =>
+                void run('set-enabled', { enabled: d.state !== 'enabled' })
+              }
+            >
+              {d.state === 'enabled' ? 'Pause access' : 'Make available'}
+            </button>
+          )}
+        </div>
+        {actionError && (
+          <p className="error" role="alert">
+            {actionError}
+          </p>
         )}
+        <EditConnectionForm
+          changed={() => {
+            setDirty(true)
+            setSaved(false)
+          }}
+          key={`${d.id}:${d.revision}:${editRevision}`}
+          detail={d}
+          groups={data.groups ?? []}
+          tab={tab}
+          revert={() => {
+            setEditRevision((value) => value + 1)
+            setDirty(false)
+            setSaved(false)
+          }}
+          done={() => {
+            setDirty(false)
+            setSaved(true)
+            reload()
+          }}
+        />
+        {tab === 'connection' &&
+          (data.authorization?.administrator ||
+            data.authorization?.capabilities.includes('manage_accounts')) &&
+          d.transport === 'streamable_http' && (
+            <details className="registry-sources">
+              <summary>Advanced OAuth application</summary>
+              <OAuthClientForm connectionId={d.id} done={reload} />
+            </details>
+          )}
       </div>
-      {actionError && (
-        <p className="error" role="alert">
-          {actionError}
-        </p>
-      )}
-      <EditConnectionForm
-        changed={() => {
-          setDirty(true)
-          setSaved(false)
-        }}
-        key={`${d.id}:${d.revision}`}
-        detail={d}
-        groups={data.groups ?? []}
-        tab={tab}
-        cancel={back}
-        done={() => {
-          setDirty(false)
-          setSaved(true)
-          reload()
-        }}
-      />
-      {tab === 'connection' &&
-        (data.authorization?.administrator ||
-          data.authorization?.capabilities.includes('manage_accounts')) &&
-        d.transport === 'streamable_http' && (
-          <details className="registry-sources">
-            <summary>Advanced OAuth application</summary>
-            <OAuthClientForm connectionId={d.id} done={reload} />
-          </details>
-        )}
     </div>
   )
 }

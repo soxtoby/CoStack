@@ -824,7 +824,21 @@ fieldset {
 
 /* ---------- connection configuration ---------- */
 .configuration-page {
+  height: calc(100dvh - 32px);
+  display: flex;
+  flex-direction: column;
   animation: arrive 0.3s;
+}
+.configuration-page > * {
+  flex-shrink: 0;
+}
+.configuration-content {
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+}
+.configuration-content > * + * {
+  margin-top: 12px;
 }
 .configuration-page > * + * {
   margin-top: 12px;
@@ -844,14 +858,11 @@ fieldset {
   border-bottom: 2px solid var(--accent);
 }
 .configuration-editor {
-  height: calc(100dvh - 250px);
-  min-height: 280px;
   border: 1px solid var(--line);
   border-radius: var(--radius);
   overflow: hidden;
 }
-.configuration-editor .action-form.scroll-body {
-  height: 100%;
+.configuration-editor .action-form.top-actions {
   display: flex;
   flex-direction: column;
   flex-wrap: nowrap;
@@ -862,15 +873,12 @@ fieldset {
   gap: 0;
 }
 .form-fields {
-  overflow-y: auto;
-  min-height: 0;
-  flex: 1;
   padding: 16px;
   display: flex;
   flex-direction: column;
   gap: 16px;
 }
-.form-footer {
+.form-actions {
   flex-shrink: 0;
   display: flex;
   align-items: center;
@@ -878,15 +886,15 @@ fieldset {
   flex-wrap: wrap;
   gap: 12px;
   padding: 12px 16px;
-  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
   background: var(--bg-sunken);
 }
-.form-footer > span {
+.form-actions > span {
   margin-right: auto;
   color: var(--text-muted);
   font-size: 12.5px;
 }
-.form-footer > .error {
+.form-actions > .error {
   width: 100%;
   margin: 0;
 }
@@ -1258,6 +1266,12 @@ fieldset {
 
 /* ---------- responsive ---------- */
 @media (max-width: 850px) {
+  .configuration-page {
+    height: auto;
+  }
+  .configuration-content {
+    overflow: visible;
+  }
   .tool-browser.has-selection {
     grid-template-columns: minmax(0, 1fr);
   }
