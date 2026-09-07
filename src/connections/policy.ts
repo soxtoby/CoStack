@@ -18,6 +18,23 @@ export function evaluateToolPolicy(
   return 'allow'
 }
 
+/**
+ * The rules that give `toolName` this effect. An exact name beats every pattern
+ * that matches it, so a rule for the tool always wins; it is dropped instead
+ * when the remaining rules already produce the effect, so choosing the action a
+ * tool already has does not leave a redundant rule behind.
+ */
+export function setToolPolicy(
+  policies: Array<ToolPolicy>,
+  toolName: string,
+  effect: ToolPolicyEffect,
+): Array<ToolPolicy> {
+  const others = policies.filter(({ pattern }) => pattern !== toolName)
+  return evaluateToolPolicy(others, toolName) === effect
+    ? others
+    : [...others, { pattern: toolName, effect }]
+}
+
 export function validateGlob(pattern: string) {
   if (
     !pattern ||

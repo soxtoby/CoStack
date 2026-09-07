@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { evaluateToolPolicy } from './policy'
+import { evaluateToolPolicy, setToolPolicy } from './policy'
 import { RegistryClient } from './registry'
 import { SecretVault } from './secrets'
 import { validateHttpUrl } from './upstream'
@@ -15,6 +15,43 @@ describe('tool policy', () => {
     expect(evaluateToolPolicy(policies, 'read_issue')).toBe('allow')
     expect(evaluateToolPolicy(policies, 'read_secret')).toBe('block')
     expect(evaluateToolPolicy(policies, 'write_issue')).toBe('block')
+  })
+
+  test('setting a tool action adds a rule only when the rules disagree', () => {
+    const policies = [
+      { pattern: '*', effect: 'block' as const },
+      { pattern: 'read_*', effect: 'allow' as const },
+    ]
+    expect(setToolPolicy(policies, 'delete_issue', 'allow')).toEqual([
+      ...policies,
+      { pattern: 'delete_issue', effect: 'allow' },
+    ])
+    expect(setToolPolicy(policies, 'read_issue', 'allow')).toEqual(policies)
+  })
+
+  test('setting a tool action replaces that tool own rule', () => {
+    const policies = [
+      { pattern: '*', effect: 'block' as const },
+      { pattern: 'read_issue', effect: 'allow' as const },
+    ]
+    const changed = setToolPolicy(policies, 'read_issue', 'require_approval')
+    expect(changed).toEqual([
+      { pattern: '*', effect: 'block' },
+      { pattern: 'read_issue', effect: 'require_approval' },
+    ])
+    expect(evaluateToolPolicy(changed, 'read_issue')).toBe('require_approval')
+  })
+
+  test('choosing the inherited action removes a now-redundant rule', () => {
+    const policies = [
+      { pattern: '*', effect: 'block' as const },
+      { pattern: 'read_*', effect: 'allow' as const },
+      { pattern: 'read_issue', effect: 'require_approval' as const },
+    ]
+    expect(setToolPolicy(policies, 'read_issue', 'allow')).toEqual([
+      { pattern: '*', effect: 'block' },
+      { pattern: 'read_*', effect: 'allow' },
+    ])
   })
 })
 

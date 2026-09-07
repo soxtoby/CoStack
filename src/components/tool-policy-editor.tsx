@@ -1,5 +1,9 @@
 import { useState } from 'react'
-import { evaluateToolPolicy, validateGlob } from '../connections/policy'
+import {
+  evaluateToolPolicy,
+  setToolPolicy,
+  validateGlob,
+} from '../connections/policy'
 import type { ToolPolicy, ToolPolicyEffect } from '../connections/types'
 
 const effects: Record<ToolPolicyEffect, string> = {
@@ -79,7 +83,9 @@ export function ToolPolicyEditor(p: {
         <p>
           The rule with the most non-wildcard characters wins. Ties prefer
           Block, then Require approval, then Allow. Tools with no matching rule
-          are blocked. The tool list previews the result.
+          are blocked. The tool list shows the result, and setting a tool's
+          action there adds a rule for that exact name, or removes it when the
+          rules already give that action.
         </p>
         {p.policies.every(({ pattern }) => pattern === '*') && (
           <p>No pattern rules. All tools use the default action.</p>
@@ -180,19 +186,6 @@ export function ToolPolicyEditor(p: {
           >
             <div className="policy-tools" aria-label="Discovered tools">
               {tools.map((tool) => {
-                const inherited = error
-                  ? 'Fix invalid patterns'
-                  : effects[
-                      evaluateToolPolicy(
-                        p.policies.filter(
-                          ({ pattern }) => pattern !== tool.name,
-                        ),
-                        tool.name,
-                      )
-                    ]
-                const effective = error
-                  ? 'Fix invalid patterns'
-                  : effects[evaluateToolPolicy(p.policies, tool.name)]
                 return (
                   <article
                     key={tool.name}
@@ -214,34 +207,26 @@ export function ToolPolicyEditor(p: {
                           'No description provided.'}
                       </span>
                     </button>
-                    <small className="tool-effect">
-                      Effective action: {effective}
-                    </small>
                     <label className="field">
                       <select
                         aria-label={`Action for ${tool.name}`}
+                        disabled={Boolean(error)}
                         value={
-                          p.policies.find(
-                            ({ pattern }) => pattern === tool.name,
-                          )?.effect ?? ''
+                          error ? '' : evaluateToolPolicy(p.policies, tool.name)
                         }
                         onChange={(e) =>
-                          p.change([
-                            ...p.policies.filter(
-                              ({ pattern }) => pattern !== tool.name,
+                          p.change(
+                            setToolPolicy(
+                              p.policies,
+                              tool.name,
+                              e.target.value as ToolPolicyEffect,
                             ),
-                            ...(e.target.value
-                              ? [
-                                  {
-                                    pattern: tool.name,
-                                    effect: e.target.value as ToolPolicyEffect,
-                                  },
-                                ]
-                              : []),
-                          ])
+                          )
                         }
                       >
-                        <option value="">Use rules ({inherited})</option>
+                        {error && (
+                          <option value="">Fix invalid patterns</option>
+                        )}
                         {Object.entries(effects).map(([value, label]) => (
                           <option key={value} value={value}>
                             {label}

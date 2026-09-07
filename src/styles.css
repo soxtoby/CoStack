@@ -968,7 +968,7 @@ fieldset {
 }
 .policy-tools article {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 140px 190px;
+  grid-template-columns: minmax(0, 1fr) 190px;
   gap: 12px;
   padding: 6px 10px;
   border-bottom: 1px solid var(--line);
@@ -997,9 +997,6 @@ fieldset {
 }
 .tool-browser.has-selection .policy-tools article {
   grid-template-columns: minmax(0, 1fr) 170px;
-}
-.tool-browser.has-selection .tool-effect {
-  display: none;
 }
 .tool-select {
   display: flex;
@@ -1274,9 +1271,6 @@ fieldset {
   .policy-tools article,
   .tool-browser.has-selection .policy-tools article {
     grid-template-columns: minmax(0, 1fr) 160px;
-  }
-  .tool-effect {
-    display: none;
   }
   .policy-tools article,
   .policy-rule {

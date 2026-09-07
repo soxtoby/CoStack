@@ -1,6 +1,17 @@
 import { expect, test } from 'bun:test'
 import { renderToStaticMarkup } from 'react-dom/server'
+import { setToolPolicy } from '../connections/policy'
 import { ToolPolicyEditor } from './tool-policy-editor'
+import type { ToolPolicy } from '../connections/types'
+
+/** The action rendered as selected in a tool row's dropdown. */
+function selectedAction(html: string, tool: string) {
+  const row = html.slice(html.indexOf(`Action for ${tool}`))
+  const match = row
+    .slice(0, row.indexOf('</select>'))
+    .match(/<option value="([a-z_]+)" selected=""/)
+  return match?.[1]
+}
 
 test('shows editable pattern rules and add control above the tool list without expanding anything', () => {
   const html = renderToStaticMarkup(
@@ -58,10 +69,39 @@ test('shows discovered descriptions and evaluates overlapping rules in the edito
     />,
   )
   expect(html).toContain('Read a Linear issue')
-  expect(html).toContain('Effective action: Allow')
-  expect(html).toContain('Effective action: Require approval')
-  expect(html).toContain('Effective action: Block')
+  expect(html).not.toContain('Use rules')
+  expect(selectedAction(html, 'read_issue')).toBe('allow')
+  expect(selectedAction(html, 'read_private')).toBe('require_approval')
+  expect(selectedAction(html, 'delete_issue')).toBe('block')
   expect(html).not.toContain('<textarea')
+})
+
+test('the action a tool row shows is the action the rules produce', () => {
+  const policies: Array<ToolPolicy> = [
+    { pattern: '*', effect: 'block' },
+    { pattern: 'read_*', effect: 'allow' },
+  ]
+  const tools = [{ name: 'read_issue' }]
+  const html = renderToStaticMarkup(
+    <ToolPolicyEditor
+      policies={setToolPolicy(policies, 'read_issue', 'require_approval')}
+      tools={tools}
+      change={() => {}}
+    />,
+  )
+  expect(selectedAction(html, 'read_issue')).toBe('require_approval')
+})
+
+test('invalid patterns disable the tool actions rather than showing a guess', () => {
+  const html = renderToStaticMarkup(
+    <ToolPolicyEditor
+      policies={[{ pattern: '[invalid]', effect: 'allow' }]}
+      tools={[{ name: 'read_issue' }]}
+      change={() => {}}
+    />,
+  )
+  expect(html).toContain('disabled=""')
+  expect(selectedAction(html, 'read_issue')).toBeUndefined()
 })
 
 test('explains how to discover tools before choosing policies', () => {
