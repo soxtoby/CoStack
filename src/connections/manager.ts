@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import { deriveNamespace } from './namespace'
 import { validateGlob } from './policy'
 import { McpUpstreamClient, validateHttpUrl } from './upstream'
 import { UpstreamOAuth } from './oauth'
@@ -607,11 +608,7 @@ function validateHeaderName(name: string) {
 }
 
 function namespaceOf(value: string) {
-  const namespace = value
-    .normalize('NFKD')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '_')
-    .replace(/^_+|_+$/g, '')
+  const namespace = deriveNamespace(value)
   validateNamespace(namespace)
   return namespace
 }

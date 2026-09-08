@@ -8,6 +8,16 @@ import {
 import { createContext, useContext, useEffect, useRef, useState } from 'react'
 import { ToolPolicyEditor } from '../components/tool-policy-editor'
 import { validateGlob } from '../connections/policy'
+import { deriveNamespace } from '../connections/namespace'
+import { rankRegistryServers } from '../connections/registry-ranking'
+import {
+  bundledPrefill,
+  findBundledMcp,
+  isBundledRegistryEntry,
+  searchBundledMcps,
+} from '../connections/bundled-mcps'
+import { BundledMcpCards, BundledMcpSetup } from './bundled-mcps'
+import { McpIcon } from './mcp-icon'
 import type { FormEvent, ReactNode } from 'react'
 import type { ConnectionInput, ToolPolicy } from '../connections/types'
 import type { RegistryServer } from '../connections/registry'
@@ -291,6 +301,8 @@ function ConnectionForm(p: {
   const [kind, setKind] = useState<'streamable_http' | 'stdio'>(
     p.initial?.transport.kind ?? 'streamable_http',
   )
+  const [displayName, setDisplayName] = useState(p.initial?.displayName ?? '')
+  const [namespace, setNamespace] = useState(p.initial?.namespace ?? '')
   return (
     <Form
       title={p.initial ? 'Review connection' : 'New MCP Connection'}
@@ -328,11 +340,16 @@ function ConnectionForm(p: {
           <input
             name="displayName"
             required
-            defaultValue={p.initial?.displayName}
+            value={displayName}
+            onChange={(e) => setDisplayName(e.target.value)}
           />
         </Field>
         <Field label="Namespace, fixed after save">
-          <input name="namespace" placeholder="derived_from_name" />
+          <input
+            name="namespace"
+            value={namespace || deriveNamespace(displayName)}
+            onChange={(e) => setNamespace(e.target.value)}
+          />
         </Field>
       </div>
       {p.initial ? (
@@ -341,7 +358,7 @@ function ConnectionForm(p: {
             {p.initial.transport.kind === 'streamable_http'
               ? 'Streamable HTTP'
               : 'STDIO'}{' '}
-            · From registry
+            · {p.initial.registry ? 'From registry' : 'Bundled configuration'}
           </b>
           {p.initial.transport.kind === 'streamable_http' ? (
             <p>
@@ -398,7 +415,11 @@ function ConnectionForm(p: {
           )}
         </>
       )}{' '}
-      <GroupChecks groups={p.data.groups ?? []} />
+      <GroupChecks
+        groups={p.data.groups ?? []}
+        label="Group access"
+        description="Select the Groups that should have access to this connection."
+      />
       <p>
         Tools start blocked. Save this connection to discover its tools, then
         choose an action for each tool in Configure → Tools. Servers requiring
@@ -524,6 +545,9 @@ function ConnectionDetail(p: {
             p.reload()
           }}
         />
+      )}
+      {addingAccount && (
+        <BundledMcpSetup entry={findBundledMcp(d.transport_config)} />
       )}
       {addingAccount && (
         <AccountForm
@@ -838,6 +862,7 @@ function AccountForm(p: {
 }
 
 function RegistryPanel(p: {
+  manual: () => void
   data: Data
   control: ControlData
   reload: () => void
@@ -885,17 +910,29 @@ function RegistryPanel(p: {
     return (
       <section className="registry">
         <button className="secondary" onClick={() => setPrefill(undefined)}>
+          <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+            <path
+              d="M13 8H3m5-5L3 8l5 5"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
           Back to registry
         </button>
+        {prefill.registry ? (
+          <p>
+            <b>{prefill.registry.serverId}</b> · Version{' '}
+            {prefill.registry.version}
+          </p>
+        ) : (
+          <BundledMcpSetup entry={findBundledMcp(prefill.transport)} />
+        )}
         <p>
-          <b>{prefill.registry?.serverId}</b> · Version{' '}
-          {prefill.registry?.version}
-        </p>
-        <p>
-          The registry supplies the connection settings. Choose a local name and
-          Group access, then save. New connections remain unavailable to MCP
-          clients during setup. After saving, configure Accounts and Tool
-          Policies, then select Make available.
+          Choose a local name and Group access, then save. After saving, add an
+          Account, configure Tool Policies, and make the connection available.
         </p>
         <ConnectionForm
           data={p.data}
@@ -907,11 +944,24 @@ function RegistryPanel(p: {
     )
   return (
     <section className="registry" aria-label="Browse MCP registry">
-      <h2>Browse MCP registry</h2>
-      <p>
-        Search by part of a server name, or browse the list. Select a server to
-        add it using its published connection settings.
-      </p>
+      <div className="connection-options">
+        <div>
+          <h2>Choose an MCP server</h2>
+          <p>
+            Use a bundled configuration, search a registry, or enter your own
+            settings.
+          </p>
+        </div>
+        <button className="secondary" onClick={p.manual}>
+          Enter settings manually
+        </button>
+      </div>
+      <BundledMcpCards
+        select={(entry) =>
+          setPrefill(bundledPrefill(entry, p.control.organizationId!))
+        }
+      />
+      <h3 className="registry-search-heading">Search registry</h3>
       <div className="registry-search">
         <Field label="Registry">
           <select
@@ -963,10 +1013,48 @@ function RegistryPanel(p: {
         </div>
       )}
       <div className="registry-results" aria-busy={loading || importing}>
-        {results.map(({ server }) => (
+        {rankRegistryServers(
+          results.filter(
+            (entry) =>
+              !isBundledRegistryEntry(
+                entry,
+                p.control.registrySources.find(
+                  (source) => source.id === sourceId,
+                )?.base_url ?? '',
+                '',
+              ),
+          ),
+          p.control.registrySources.find((source) => source.id === sourceId)
+            ?.base_url ?? '',
+        ).map(({ server }) => (
           <article key={`${server.name}:${server.version}`}>
-            <div>
-              <b>{server.name}</b>
+            <McpIcon
+              src={
+                server.icons?.find(
+                  (icon) =>
+                    icon.theme !== 'dark' && icon.src.startsWith('https://'),
+                )?.src
+              }
+              name={server.title || server.name}
+            />
+            <div className="registry-result-content">
+              <div className="registry-result-title">
+                <b>{server.title || server.name}</b>
+                {server.title && <small>{server.name}</small>}
+              </div>
+              {server.remotes?.find(
+                (remote) => remote.type === 'streamable-http',
+              ) && (
+                <small>
+                  <code>
+                    {
+                      server.remotes.find(
+                        (remote) => remote.type === 'streamable-http',
+                      )!.url
+                    }
+                  </code>
+                </small>
+              )}
               <small>Version {server.version}</small>
               <p>{server.description || 'No description provided.'}</p>
             </div>
@@ -1000,11 +1088,14 @@ function RegistryPanel(p: {
       </div>
       {loading && <p role="status">Loading servers…</p>}
       {importing && <p role="status">Loading connection settings…</p>}
-      {!loading && !error && results.length === 0 && (
-        <p role="status">
-          No servers found. Try a shorter name or another registry.
-        </p>
-      )}
+      {!loading &&
+        !error &&
+        results.length === 0 &&
+        searchBundledMcps(query).length === 0 && (
+          <p role="status">
+            No servers found. Try a shorter name or another registry.
+          </p>
+        )}
       {nextCursor && !error && (
         <button
           className="secondary"
@@ -1719,14 +1810,17 @@ function GroupChecks({
   groups,
   selected = [],
   label = 'Initial Groups',
+  description,
 }: {
   groups: Array<Group>
   selected?: Array<string>
   label?: string
+  description?: string
 }) {
   return (
-    <fieldset>
+    <fieldset className="group-checks">
       <legend>{label}</legend>
+      {description && <p>{description}</p>}
       {groups.map((g) => (
         <label className="check" key={g.id}>
           <input
@@ -1895,27 +1989,65 @@ export function AddConnectionPage({ data }: View) {
       title="Add connection"
       actions={
         <>
-          <Link to="/connections">← Back to connections</Link>
-          <button className="secondary" onClick={() => setManual(!manual)}>
-            {manual ? 'Browse registry' : 'Enter settings manually'}
-          </button>
+          <Link
+            className="secondary close-connection"
+            to="/connections"
+            aria-label="Close add connection"
+            title="Close"
+          >
+            <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+              <path
+                d="m4 4 8 8M12 4l-8 8"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+              />
+            </svg>
+          </Link>
         </>
       }
     >
-      {manual ? (
-        <ConnectionForm
-          data={data}
-          organizationId={control.organizationId!}
-          done={done}
-        />
-      ) : (
-        <RegistryPanel
-          data={data}
-          control={control}
-          reload={reload}
-          done={done}
-        />
-      )}
+      <div className="connection-picker">
+        {manual ? (
+          <>
+            <button
+              className="secondary choose-server"
+              onClick={() => setManual(false)}
+            >
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 16 16"
+                aria-hidden="true"
+              >
+                <path
+                  d="M13 8H3m5-5L3 8l5 5"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+              Choose a server
+            </button>
+            <ConnectionForm
+              data={data}
+              organizationId={control.organizationId!}
+              done={done}
+            />
+          </>
+        ) : (
+          <RegistryPanel
+            manual={() => setManual(true)}
+            data={data}
+            control={control}
+            reload={reload}
+            done={done}
+          />
+        )}
+      </div>
     </Page>
   )
 }

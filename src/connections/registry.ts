@@ -5,6 +5,8 @@ export const OFFICIAL_REGISTRY = 'https://registry.modelcontextprotocol.io'
 export type RegistryServer = {
   server: {
     name: string
+    title?: string
+    icons?: Array<{ src: string; mimeType?: string; theme?: 'light' | 'dark' }>
     description?: string
     version: string
     packages?: Array<{
@@ -59,7 +61,7 @@ export class RegistryClient {
     const server = entry.server
     return {
       organizationId,
-      displayName: server.name.split('/').at(-1) ?? server.name,
+      displayName: server.title || server.name.split('/').at(-1) || server.name,
       transport: registryTransport(server),
       state: 'disabled',
       groupIds: [],

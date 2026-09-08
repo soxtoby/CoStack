@@ -34,6 +34,10 @@ The image pins Bun and the .NET SDK, runs as a non-root user, and supports exact
 
 For ChatGPT, use the gateway's Client ID Metadata Document flow. For Claude, create a predefined OAuth client and enter its client ID and secret in Claude. Both connect to `${APPLICATION_URL}/mcp` and require a publicly reachable HTTPS deployment.
 
+## Bundled MCPs
+
+Common services appear immediately on Add connection, without registry access. To add another, follow [the bundled catalog guide](docs/bundled-mcps.md).
+
 ## Scope
 
 CoStack supports Streamable HTTP and STDIO upstreams, tools only, local Groups, one OIDC provider, and metadata-only audit logs. STDIO commands may use `bunx`, `dotnet`, or another executable already in the image. Runtime file uploads, legacy SSE, payload logging, SAML, infrastructure provisioning, and automatic package upgrades are not supported.
