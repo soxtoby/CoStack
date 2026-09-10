@@ -240,6 +240,34 @@ aside footer button {
   font-size: 12.5px;
   color: var(--text-muted);
 }
+.user-section > h2 {
+  margin: 0 0 8px;
+  font-size: 13px;
+  color: var(--text-strong);
+}
+.user-section > .note {
+  margin: -4px 0 8px;
+}
+.sign-in-link {
+  max-width: 620px;
+  margin-bottom: 8px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+.sign-in-link code {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 7px 9px;
+  border: 1px solid var(--line-input);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text-strong);
+  font: 12px/1.5 var(--font-mono);
+}
 .toolbar {
   display: flex;
   justify-content: space-between;

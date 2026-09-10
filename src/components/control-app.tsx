@@ -30,7 +30,6 @@ const pagePaths = {
   preferences: '/preferences',
   audit: '/audit',
   users: '/users',
-  access: '/pre-provisioned-access',
   groups: '/groups',
   services: '/service-accounts',
   sso: '/sso',
@@ -105,7 +104,6 @@ export function App() {
     ...(manage
       ? [
           ['users', 'Users'],
-          ['access', 'Pre-provisioned access'],
           ['groups', 'Groups'],
           ['services', 'Service Accounts'],
         ]
@@ -1396,96 +1394,118 @@ export function Overview({ data }: { data: Data }) {
   )
 }
 export function Users({ data, reload }: View) {
+  const [signInUrl, setSignInUrl] = useState('')
+  const [copied, setCopied] = useState(false)
+  useEffect(() => setSignInUrl(location.origin), [])
   return (
     <Page title="Users">
-      <Rows>
-        {data.users?.map((u) => (
-          <article key={u.id}>
-            <div>
-              <b>{u.display_name}</b>
-              <small>{u.email}</small>
-            </div>
-            <Chips
-              values={data.groups
-                ?.filter((g) => u.group_ids.includes(g.id))
-                .map((g) => g.display_name)}
+      <section className="user-section">
+        <h2>Add user</h2>
+        <p className="note">
+          Enter their verified SSO email and choose their Groups. Then send them
+          the sign-in URL. They must sign in within seven days to claim access.
+        </p>
+        <div className="sign-in-link">
+          <code>{signInUrl || 'Loading sign-in URL…'}</code>
+          <button
+            className="secondary"
+            type="button"
+            disabled={!signInUrl}
+            onClick={async () => {
+              await navigator.clipboard.writeText(signInUrl)
+              setCopied(true)
+            }}
+          >
+            {copied ? 'Copied' : 'Copy sign-in URL'}
+          </button>
+        </div>
+        <Form
+          submit="Add user"
+          go={async (f) => {
+            await act('create-access', {
+              email: f.get('email'),
+              groupIds: f.getAll('groups'),
+            })
+            reload()
+          }}
+        >
+          <Field label="Verified email">
+            <input
+              name="email"
+              type="email"
+              required
+              placeholder="name@company.com"
             />
-            <Status ok={!u.disabled_at}>
-              {u.disabled_at ? 'Suspended' : 'Active'}
-            </Status>
-            <button
-              className="danger"
-              onClick={() =>
-                act('set-disabled', {
-                  id: u.id,
-                  disabled: !u.disabled_at,
-                }).then(reload)
-              }
-            >
-              {u.disabled_at ? 'Restore' : 'Suspend'}
-            </button>
-          </article>
-        ))}
-      </Rows>
-    </Page>
-  )
-}
-export function Access({ data, reload }: View) {
-  return (
-    <Page title="Pre-provisioned access">
-      <p className="note">
-        Prepare Group membership for a verified SSO email. Records expire after
-        seven days.
-      </p>
-      <Form
-        submit="Prepare access"
-        go={async (f) => {
-          await act('create-access', {
-            email: f.get('email'),
-            groupIds: f.getAll('groups'),
-          })
-          reload()
-        }}
-      >
-        <Field label="Verified email">
-          <input
-            name="email"
-            type="email"
-            required
-            placeholder="name@company.com"
-          />
-        </Field>
-        <GroupChecks groups={data.groups ?? []} />
-      </Form>
-      <Rows>
-        {data.access?.map((x) => (
-          <article key={x.id}>
-            <div>
-              <b>{x.normalized_email}</b>
-              <small>
-                {x.claimed_at
-                  ? 'Claimed'
-                  : x.revoked_at
-                    ? 'Revoked'
-                    : `Expires ${new Date(x.expires_at).toLocaleDateString()}`}
-              </small>
-            </div>
-            <Chips
-              values={data.groups
-                ?.filter((g) => x.group_ids.includes(g.id))
-                .map((g) => g.display_name)}
-            />
-            {!x.claimed_at && !x.revoked_at && (
+          </Field>
+          <GroupChecks groups={data.groups ?? []} />
+        </Form>
+      </section>
+      <section className="user-section">
+        <h2>Pending access</h2>
+        <Rows>
+          {data.access?.map((x) => (
+            <article key={x.id}>
+              <div>
+                <b>{x.normalized_email}</b>
+                <small>
+                  {x.claimed_at
+                    ? 'Claimed'
+                    : x.revoked_at
+                      ? 'Revoked'
+                      : `Expires ${new Date(x.expires_at).toLocaleDateString()}`}
+                </small>
+              </div>
+              <Chips
+                values={data.groups
+                  ?.filter((g) => x.group_ids.includes(g.id))
+                  .map((g) => g.display_name)}
+              />
+              {!x.claimed_at && !x.revoked_at && (
+                <button
+                  className="danger"
+                  onClick={() =>
+                    act('revoke-access', { id: x.id }).then(reload)
+                  }
+                >
+                  Revoke
+                </button>
+              )}
+            </article>
+          ))}
+        </Rows>
+      </section>
+      <section className="user-section">
+        <h2>Users</h2>
+        <Rows>
+          {data.users?.map((u) => (
+            <article key={u.id}>
+              <div>
+                <b>{u.display_name}</b>
+                <small>{u.email}</small>
+              </div>
+              <Chips
+                values={data.groups
+                  ?.filter((g) => u.group_ids.includes(g.id))
+                  .map((g) => g.display_name)}
+              />
+              <Status ok={!u.disabled_at}>
+                {u.disabled_at ? 'Suspended' : 'Active'}
+              </Status>
               <button
                 className="danger"
-                onClick={() => act('revoke-access', { id: x.id }).then(reload)}
+                onClick={() =>
+                  act('set-disabled', {
+                    id: u.id,
+                    disabled: !u.disabled_at,
+                  }).then(reload)
+                }
               >
-                Revoke
+                {u.disabled_at ? 'Restore' : 'Suspend'}
               </button>
-            )}
-          </article>
-        ))}
-      </Rows>
+            </article>
+          ))}
+        </Rows>
+      </section>
     </Page>
   )
 }

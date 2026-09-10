@@ -1,11 +1,7 @@
-import { createFileRoute } from '@tanstack/react-router'
-import { Access, useControlView } from '../components/control-app'
+import { createFileRoute, redirect } from '@tanstack/react-router'
 
 export const Route = createFileRoute('/_app/pre-provisioned-access')({
-  component: Page,
+  beforeLoad: () => {
+    throw redirect({ to: '/users' })
+  },
 })
-
-function Page() {
-  const view = useControlView()
-  return <Access {...view} />
-}

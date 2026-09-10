@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from 'node:crypto'
 import { databasePool } from '../database/pool'
+import { grantAccess } from './access'
 import { auth } from './auth'
 import {
   assertAdministratorChange,
@@ -149,18 +150,13 @@ async function createAccess(body: Record<string, unknown>) {
     .trim()
     .toLowerCase()
   if (!email.includes('@')) throw new Error('Enter a valid email address')
-  const id = crypto.randomUUID()
   const pool = databasePool()
-  await pool.query(
-    `INSERT INTO pre_provisioned_access(id,organization_id,normalized_email,expires_at)
-    VALUES($1,$2,$3,now()+interval '7 days')`,
-    [id, await organizationId(), email],
+  await grantAccess(
+    pool,
+    await organizationId(),
+    email,
+    stringArray(body.groupIds),
   )
-  for (const groupId of stringArray(body.groupIds))
-    await pool.query(
-      'INSERT INTO pre_provisioned_access_groups(access_id,group_id) VALUES($1,$2)',
-      [id, groupId],
-    )
   return Response.json({ ok: true })
 }
 
