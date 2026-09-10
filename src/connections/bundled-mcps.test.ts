@@ -4,6 +4,7 @@ import {
   bundledPrefill,
   findBundledMcp,
   isBundledRegistryEntry,
+  resolveBundledTransport,
   searchBundledMcps,
 } from './bundled-mcps'
 import { OFFICIAL_REGISTRY } from './registry'
@@ -58,6 +59,42 @@ test('deduplicates only visible bundled entries from the official registry', () 
       'github',
     ),
   ).toBe(false)
+})
+
+test('retains Teams setup for a configured tenant without matching unrelated URLs', () => {
+  const url =
+    'https://agent365.svc.cloud.microsoft/agents/tenants/12345678-abcd-1234-abcd-123456789abc/servers/mcp_TeamsServer'
+  expect(findBundledMcp({ kind: 'streamable_http', url })?.id).toBe(
+    'microsoft-teams',
+  )
+  for (const unrelated of [
+    url.replace('agent365.svc.cloud.microsoft', 'example.com'),
+    url.replace('mcp_TeamsServer', 'mcp_WordServer'),
+    url.replace('12345678-abcd-1234-abcd-123456789abc', 'invalid'),
+    `${url}/extra`,
+  ]) {
+    expect(
+      findBundledMcp({ kind: 'streamable_http', url: unrelated }),
+    ).toBeUndefined()
+  }
+})
+
+test('resolves the Teams tenant before saving and rejects missing or invalid IDs', () => {
+  const teams = bundledMcps.find((entry) => entry.id === 'microsoft-teams')!
+  const tenantId = '12345678-abcd-1234-abcd-123456789abc'
+  expect(resolveBundledTransport(teams.transport, ` ${tenantId} `)).toEqual({
+    kind: 'streamable_http',
+    url: `https://agent365.svc.cloud.microsoft/agents/tenants/${tenantId}/servers/mcp_TeamsServer`,
+  })
+  for (const invalid of ['', 'example.com', '{tenantId}']) {
+    expect(() => resolveBundledTransport(teams.transport, invalid)).toThrow(
+      'tenant ID',
+    )
+  }
+  expect(teams.transport).toHaveProperty(
+    'url',
+    'https://agent365.svc.cloud.microsoft/agents/tenants/{tenantId}/servers/mcp_TeamsServer',
+  )
 })
 
 test('catalog entries have unique IDs, vendor documentation, and setup instructions', () => {

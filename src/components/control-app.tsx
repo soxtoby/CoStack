@@ -14,7 +14,9 @@ import {
   bundledPrefill,
   findBundledMcp,
   isBundledRegistryEntry,
+  resolveBundledTransport,
   searchBundledMcps,
+  tenantIdPattern,
 } from '../connections/bundled-mcps'
 import { BundledMcpCards, BundledMcpSetup } from './bundled-mcps'
 import { McpIcon } from './mcp-icon'
@@ -292,7 +294,7 @@ export function Connections({ data }: { data: Data }) {
   )
 }
 
-function ConnectionForm(p: {
+export function ConnectionForm(p: {
   data: Data
   organizationId: string
   initial?: ConnectionInput
@@ -303,6 +305,10 @@ function ConnectionForm(p: {
   )
   const [displayName, setDisplayName] = useState(p.initial?.displayName ?? '')
   const [namespace, setNamespace] = useState(p.initial?.namespace ?? '')
+  const needsTenantId =
+    !p.initial?.registry &&
+    p.initial?.transport.kind === 'streamable_http' &&
+    p.initial.transport.url.includes('{tenantId}')
   return (
     <Form
       title={p.initial ? 'Review connection' : 'New MCP Connection'}
@@ -325,7 +331,12 @@ function ConnectionForm(p: {
             organizationId: p.organizationId,
             displayName: String(f.get('displayName')),
             namespace: String(f.get('namespace') || '') || undefined,
-            transport,
+            transport: needsTenantId
+              ? resolveBundledTransport(
+                  transport,
+                  String(f.get('tenantId') ?? ''),
+                )
+              : transport,
             state: 'disabled',
             groupIds: f.getAll('groups').map(String),
             policies,
@@ -375,6 +386,20 @@ function ConnectionForm(p: {
             </p>
           )}
           <small>Uses the transport settings published by this server.</small>
+          {needsTenantId && (
+            <Field label="Microsoft Entra tenant ID">
+              <input
+                name="tenantId"
+                required
+                pattern={tenantIdPattern}
+                placeholder="00000000-0000-0000-0000-000000000000"
+              />
+              <small>
+                Find this in Microsoft Entra → Overview → Tenant ID. It replaces{' '}
+                {'{tenantId}'} in the URL when you save.
+              </small>
+            </Field>
+          )}
         </div>
       ) : (
         <>
