@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "bun run src/database/dev.ts",
+    "dev": "bun run src/dev.ts",
     "build": "vite build",
     "start": "bun run server.ts",
     "db:migrate": "bun run src/database/migrate.ts",

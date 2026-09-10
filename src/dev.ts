@@ -2,7 +2,7 @@ import { mkdir } from 'node:fs/promises'
 import { PGlite } from '@electric-sql/pglite'
 import { PGLiteSocketServer } from '@electric-sql/pglite-socket'
 import { Pool } from 'pg'
-import { migrate } from './migrate'
+import { migrate } from './database/migrate'
 
 const directory = '.pglite'
 await mkdir(directory, { recursive: true })
