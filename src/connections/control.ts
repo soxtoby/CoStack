@@ -6,6 +6,7 @@ import { OFFICIAL_REGISTRY, RegistryClient } from './registry'
 import { SecretVault } from './secrets'
 import { evaluateToolPolicy } from './policy'
 import { upstreamOAuthHandler } from './oauth-handler'
+import { findBundledMcp } from './bundled-mcps'
 import {
   controlActionAccess,
   mayPerformControlAction,
@@ -124,14 +125,15 @@ async function snapshot(request: Request, url: URL) {
   const organizationId = organization.rows[0]?.id
   const [connections, sources, settings, audit] = await Promise.all([
     pool.query(
-      `SELECT c.id,c.display_name,c.namespace,c.transport,c.state,c.revision,
+      `SELECT c.id,c.display_name,c.namespace,c.transport,c.transport_config,c.state,c.revision,
       c.registry_server_id,c.registry_version,h.healthy,h.error,h.checked_at,
+      (SELECT COUNT(*)::int FROM mcp_accounts a WHERE a.connection_id=c.id AND ($3 OR a.kind='shared' OR a.owner_user_id=$2)) account_count,
       COALESCE(array_agg(DISTINCT cg.group_id) FILTER (WHERE cg.group_id IS NOT NULL),'{}') group_ids
       FROM mcp_connections c LEFT JOIN connection_groups cg ON cg.connection_id=c.id
       LEFT JOIN connection_health h ON h.connection_id=c.id
       WHERE $1 OR EXISTS (SELECT 1 FROM connection_groups visible_cg JOIN group_memberships visible_gm ON visible_gm.group_id=visible_cg.group_id WHERE visible_cg.connection_id=c.id AND visible_gm.principal_id=$2)
       GROUP BY c.id,h.healthy,h.error,h.checked_at ORDER BY c.display_name`,
-      [canConnections || canAccounts, actor.current.user.id],
+      [canConnections || canAccounts, actor.current.user.id, canAccounts],
     ),
     canConnections
       ? pool.query(
@@ -165,7 +167,14 @@ async function snapshot(request: Request, url: URL) {
       )
     ).rows[0]?.approval_method,
     organizationId,
-    connections: connections.rows,
+    connections: connections.rows.map(
+      ({ transport_config, ...connection }) => ({
+        ...connection,
+        icon: findBundledMcp(
+          scrubTransport(transport_config as TransportConfig),
+        )?.icon,
+      }),
+    ),
     registrySources: sources.rows,
     auditRetentionDays: settings.rows[0]?.audit_retention_days ?? 90,
     audit: audit.rows,

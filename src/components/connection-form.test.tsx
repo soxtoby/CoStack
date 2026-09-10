@@ -1,7 +1,33 @@
 import { expect, test } from 'bun:test'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { bundledMcps, bundledPrefill } from '../connections/bundled-mcps'
-import { ConnectionForm } from './control-app'
+import { ConnectionForm, ConnectionSummary } from './control-app'
+
+test('collapsed connection summary shows its visible Account count', () => {
+  const html = renderToStaticMarkup(
+    <ConnectionSummary
+      connection={{
+        id: 'linear',
+        display_name: 'Linear',
+        namespace: 'linear',
+        transport: 'streamable_http',
+        state: 'enabled',
+        revision: 1,
+        healthy: true,
+        error: null,
+        account_count: 2,
+        icon: '/icons/linear.svg',
+        group_ids: [],
+      }}
+      expanded={false}
+      select={() => {}}
+    />,
+  )
+  expect(html).toContain('aria-expanded="false"')
+  expect(html).toContain('2 Accounts')
+  expect(html).toContain('linear__*')
+  expect(html).toContain('<img src="/icons/linear.svg"')
+})
 
 test('Teams review provides a required tenant ID input before saving', () => {
   const entry = bundledMcps.find((mcp) => mcp.id === 'microsoft-teams')!

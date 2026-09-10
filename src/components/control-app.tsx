@@ -175,6 +175,8 @@ type ControlData = {
     revision: number
     healthy: boolean | null
     error: string | null
+    account_count: number
+    icon?: string
     group_ids: Array<string>
   }>
   registrySources: Array<{
@@ -218,7 +220,7 @@ export function Connections({ data }: { data: Data }) {
   const { connection: selected } = useSearch({ from: '/_app/connections' })
   const navigate = useNavigate({ from: '/connections' })
   const setSelected = (connection: string) =>
-    void navigate({ search: { connection } })
+    void navigate({ search: selected === connection ? {} : { connection } })
   const requestId = useRef(0)
   const load = async (id = selected) => {
     const currentRequest = ++requestId.current
@@ -257,40 +259,62 @@ export function Connections({ data }: { data: Data }) {
         </>
       }
     >
-      <div className="connection-grid">
-        <div className="connection-list">
-          {control.connections.map((c) => (
-            <button
-              key={c.id}
-              className={selected === c.id ? 'selected' : ''}
-              onClick={() => setSelected(c.id)}
-            >
-              <Status ok={c.state === 'enabled'}>
-                {c.state === 'enabled' ? 'Available' : 'Not available'}
-              </Status>
-              <b>{c.display_name}</b>
-              <code>{c.namespace}__*</code>
-            </button>
-          ))}
-        </div>
-        <section className="connection-detail">
-          {!control.detail ? (
-            <div className="empty">
-              <code>NO CONNECTION SELECTED</code>
-              <p>Choose a connection to view your Accounts.</p>
-            </div>
-          ) : (
-            <ConnectionDetail
-              key={control.detail.id}
-              detail={control.detail}
-              canConnections={Boolean(canConnections)}
-              canAccounts={Boolean(canAccounts)}
-              reload={() => load(control.detail!.id)}
-            />
-          )}
-        </section>
+      <div className="connection-list">
+        {control.connections.map((connection) => {
+          const expanded = selected === connection.id
+          return (
+            <article key={connection.id} className={expanded ? 'expanded' : ''}>
+              <ConnectionSummary
+                connection={connection}
+                expanded={expanded}
+                select={() => setSelected(connection.id)}
+              />
+              {expanded && control.detail?.id === connection.id && (
+                <section className="connection-detail">
+                  <ConnectionDetail
+                    key={control.detail.id}
+                    detail={control.detail}
+                    canConnections={Boolean(canConnections)}
+                    canAccounts={Boolean(canAccounts)}
+                    reload={() => load(control.detail!.id)}
+                  />
+                </section>
+              )}
+            </article>
+          )
+        })}
       </div>
     </Page>
+  )
+}
+
+export function ConnectionSummary(p: {
+  connection: ControlData['connections'][number]
+  expanded: boolean
+  select: () => void
+}) {
+  const c = p.connection
+  return (
+    <button
+      className="connection-summary"
+      aria-expanded={p.expanded}
+      onClick={p.select}
+    >
+      <span className="connection-chevron" aria-hidden="true">
+        ›
+      </span>
+      <McpIcon src={c.icon} name={c.display_name} />
+      <span className="connection-identity">
+        <b>{c.display_name}</b>
+        <code>{c.namespace}__*</code>
+      </span>
+      <Status ok={c.state === 'enabled'}>
+        {c.state === 'enabled' ? 'Available' : 'Not available'}
+      </Status>
+      <span className="account-count">
+        {c.account_count} {c.account_count === 1 ? 'Account' : 'Accounts'}
+      </span>
+    </button>
   )
 }
 
@@ -467,12 +491,7 @@ function ConnectionDetail(p: {
   return (
     <>
       <header className="detail-head">
-        <div>
-          <h2>{d.display_name}</h2>
-          <Status ok={d.state === 'enabled'}>
-            {d.state === 'enabled' ? 'Available' : 'Not available'}
-          </Status>
-        </div>
+        <h3>Accounts</h3>
         <div className="detail-actions">
           <button
             className="primary"
@@ -497,7 +516,6 @@ function ConnectionDetail(p: {
           {refreshError}
         </p>
       )}{' '}
-      <h3>Accounts</h3>
       {d.accounts.length === 0 && (
         <p>
           No Accounts yet. Choose Add Account to sign in to this connection.
