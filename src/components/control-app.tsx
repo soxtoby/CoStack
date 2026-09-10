@@ -1387,7 +1387,7 @@ export function Overview({ data }: { data: Data }) {
           </h2>
           <p>
             {data.providers?.length
-              ? `${data.providers[0]!.domain} identities may sign in.`
+              ? 'Your OIDC provider handles Organization sign-in.'
               : 'Configure OIDC before onboarding users.'}
           </p>
         </div>
@@ -1638,6 +1638,7 @@ export function Sso({ data, reload }: View) {
   return (
     <Page title="Single sign-on">
       <Form
+        className="sso-form"
         submit={p ? 'Update provider' : 'Connect provider'}
         go={async (f) => {
           await act('save-sso', Object.fromEntries(f))
@@ -1645,23 +1646,6 @@ export function Sso({ data, reload }: View) {
         }}
       >
         <div className="form-grid">
-          <Field label="Provider ID">
-            <input
-              name="providerId"
-              required
-              defaultValue={p?.provider_id}
-              disabled={!!p}
-              placeholder="company"
-            />
-          </Field>
-          <Field label="Email domain">
-            <input
-              name="domain"
-              required
-              defaultValue={p?.domain}
-              placeholder="company.com"
-            />
-          </Field>
           <Field label="Issuer URL">
             <input name="issuer" type="url" required defaultValue={p?.issuer} />
           </Field>
@@ -1897,6 +1881,7 @@ function Toggle(p: {
   )
 }
 function Form(p: {
+  className?: string
   topActions?: boolean
   revert?: () => void
   disabled?: boolean
@@ -1911,7 +1896,7 @@ function Form(p: {
   return (
     <form
       noValidate={p.topActions}
-      className={`action-form ${p.compact ? 'compact' : ''} ${p.topActions ? 'top-actions' : ''}`}
+      className={`action-form ${p.className ?? ''} ${p.compact ? 'compact' : ''} ${p.topActions ? 'top-actions' : ''}`}
       onSubmit={async (e: FormEvent<HTMLFormElement>) => {
         e.preventDefault()
         if (submitting || p.disabled) return

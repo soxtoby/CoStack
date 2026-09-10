@@ -317,14 +317,11 @@ async function createServiceAccount(body: Record<string, unknown>) {
 
 async function saveSso(request: Request, body: Record<string, unknown>) {
   await requireCapability(request, 'manage_sso')
-  const providerId = String(body.providerId ?? '').trim()
-  const domain = String(body.domain ?? '').trim()
   const issuer = String(body.issuer ?? '').trim()
-  if (!providerId || !domain || !issuer)
-    throw new Error('Provider ID, domain, and issuer are required')
+  if (!issuer) throw new Error('Issuer URL is required')
   const pool = databasePool()
-  const existing = await pool.query<{ providerId: string }>(
-    'SELECT "providerId" FROM "ssoProvider" LIMIT 1',
+  const existing = await pool.query<{ providerId: string; domain: string }>(
+    'SELECT "providerId", domain FROM "ssoProvider" LIMIT 1',
   )
   const path = existing.rows[0]
     ? '/api/auth/sso/update-provider'
@@ -333,7 +330,7 @@ async function saveSso(request: Request, body: Record<string, unknown>) {
     ? {
         providerId: existing.rows[0].providerId,
         issuer,
-        domain,
+        domain: existing.rows[0].domain,
         oidcConfig: {
           clientId: String(body.clientId),
           clientSecret: String(body.clientSecret),
@@ -341,9 +338,11 @@ async function saveSso(request: Request, body: Record<string, unknown>) {
         },
       }
     : {
-        providerId,
+        providerId: 'organization',
         issuer,
-        domain,
+        // Better Auth requires a domain for multi-provider email routing. CoStack
+        // has one explicitly selected provider, so reserve a non-matching value.
+        domain: 'organization.invalid',
         oidcConfig: {
           clientId: String(body.clientId),
           clientSecret: String(body.clientSecret),

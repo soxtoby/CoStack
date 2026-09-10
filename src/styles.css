@@ -355,6 +355,23 @@ aside footer button {
 .action-form .form-grid {
   display: contents;
 }
+.action-form.sso-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  width: min(100%, 520px);
+  align-items: start;
+}
+.sso-form .form-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+}
+.sso-form .field {
+  align-self: start;
+}
+.sso-form > button {
+  justify-self: start;
+}
 .action-form > fieldset,
 .action-form > p,
 .action-form > .error,
@@ -1556,7 +1573,11 @@ fieldset {
   .tool-table > div,
   .account-cards article,
   .audit-table article,
-  .form-grid {
+  .form-grid,
+  .sso-form .form-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .action-form.sso-form {
     grid-template-columns: minmax(0, 1fr);
   }
   .segmented {
