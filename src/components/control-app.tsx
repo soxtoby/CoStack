@@ -11,6 +11,10 @@ import { validateGlob } from '../connections/policy'
 import { deriveNamespace } from '../connections/namespace'
 import { rankRegistryServers } from '../connections/registry-ranking'
 import {
+  formatStdioCommandLine,
+  parseStdioCommandLine,
+} from '../connections/stdio'
+import {
   bundledPrefill,
   findBundledMcp,
   isBundledRegistryEntry,
@@ -20,19 +24,19 @@ import {
 } from '../connections/bundled-mcps'
 import { BundledMcpCards, BundledMcpSetup } from './bundled-mcps'
 import { McpIcon } from './mcp-icon'
+import { UiIcon } from './ui-icon'
 import type { FormEvent, ReactNode } from 'react'
+import type { BundledMcp } from '../connections/bundled-mcps'
 import type { ConnectionInput, ToolPolicy } from '../connections/types'
 import type { RegistryServer } from '../connections/registry'
 
 const pagePaths = {
-  overview: '/overview',
   connections: '/connections',
   preferences: '/preferences',
   audit: '/audit',
   users: '/users',
   groups: '/groups',
   services: '/service-accounts',
-  sso: '/sso',
 } as const
 type Group = {
   id: string
@@ -83,7 +87,7 @@ export function App() {
   const page =
     Object.entries(pagePaths).find(
       ([, path]) => path === pathname || pathname.startsWith(path + '/'),
-    )?.[0] ?? 'overview'
+    )?.[0] ?? 'connections'
   const reload = () =>
     fetch('/api/admin').then(async (r) => setData(await r.json()))
   useEffect(() => void reload(), [])
@@ -93,14 +97,7 @@ export function App() {
   const manage =
     data.authorization?.administrator ||
     data.authorization?.capabilities.includes('manage_principals_groups')
-  const links = [
-    ['overview', 'Overview'],
-    ['connections', 'MCP Connections'],
-    ['preferences', 'Preferences'],
-    ...(data.authorization?.administrator ||
-    data.authorization?.capabilities.includes('view_audit')
-      ? [['audit', 'Audit']]
-      : []),
+  const administrationLinks = [
     ...(manage
       ? [
           ['users', 'Users'],
@@ -109,29 +106,34 @@ export function App() {
         ]
       : []),
     ...(data.authorization?.administrator ||
-    data.authorization?.capabilities.includes('manage_sso')
-      ? [['sso', 'SSO']]
+    data.authorization?.capabilities.includes('view_audit')
+      ? [['audit', 'Audit']]
       : []),
+  ]
+  const links = [
+    ['connections', 'MCP Connections'],
+    ...administrationLinks,
+    ['preferences', 'Settings'],
   ]
   return (
     <div className="app">
       <aside>
         <Logo />
-        <div className="org">{data.organization?.display_name}</div>
-        <div className="online">
-          <i /> Gateway online
-        </div>
+        {data.organization?.display_name !== 'CoStack' && (
+          <div className="org">{data.organization?.display_name}</div>
+        )}
         <nav>
-          {links.map(([id, label]) => (
-            <Link
-              className={page === id ? 'active' : ''}
-              aria-current={page === id ? 'page' : undefined}
-              to={pagePaths[id as keyof typeof pagePaths]}
-              key={id}
-            >
-              {label}
-            </Link>
-          ))}
+          <NavLinks links={[['connections', 'MCP Connections']]} page={page} />
+          {administrationLinks.length > 0 && (
+            <section>
+              <h2>Administration</h2>
+              <NavLinks links={administrationLinks} page={page} />
+            </section>
+          )}
+          <section>
+            <h2>Configuration</h2>
+            <NavLinks links={[['preferences', 'Settings']]} page={page} />
+          </section>
         </nav>
         <footer>
           <b>{data.me?.name}</b>
@@ -143,7 +145,9 @@ export function App() {
             title="Sign out"
             onClick={() => act('sign-out').then(() => location.reload())}
           >
-            ↗
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M16 17l5-5-5-5M21 12H9M10 4H5a2 2 0 00-2 2v12a2 2 0 002 2h5" />
+            </svg>
           </button>
         </footer>
       </aside>
@@ -158,6 +162,25 @@ export function App() {
       </main>
     </div>
   )
+}
+
+function NavLinks({
+  links,
+  page,
+}: {
+  links: Array<Array<string>>
+  page: string
+}) {
+  return links.map(([id, label]) => (
+    <Link
+      className={page === id ? 'active' : ''}
+      aria-current={page === id ? 'page' : undefined}
+      to={pagePaths[id as keyof typeof pagePaths]}
+      key={id}
+    >
+      {label}
+    </Link>
+  ))
 }
 
 type ControlData = {
@@ -301,7 +324,7 @@ export function ConnectionSummary(p: {
       onClick={p.select}
     >
       <span className="connection-chevron" aria-hidden="true">
-        ›
+        <UiIcon name="chevronRight" />
       </span>
       <McpIcon src={c.icon} name={c.display_name} />
       <span className="connection-identity">
@@ -347,10 +370,7 @@ export function ConnectionForm(p: {
             ? { kind, url: String(f.get('url')) }
             : {
                 kind,
-                command: String(f.get('command')),
-                args: String(f.get('args') || '')
-                  .split(/\s+/)
-                  .filter(Boolean),
+                ...parseStdioCommandLine(String(f.get('commandLine'))),
               })
         const result = await controlAct('create-connection', {
           input: {
@@ -455,14 +475,24 @@ export function ConnectionForm(p: {
               />
             </Field>
           ) : (
-            <div className="form-grid">
-              <Field label="Command">
-                <input name="command" required placeholder="bunx or dotnet" />
-              </Field>
-              <Field label="Arguments">
-                <input name="args" placeholder="@scope/server@1.2.3" />
-              </Field>
-            </div>
+            <Field label="Launch command">
+              <input
+                name="commandLine"
+                required
+                placeholder="bunx @scope/server@1.2.3"
+                spellCheck={false}
+              />
+              <small>
+                CoStack runs this command whenever it connects. A package runner
+                such as bunx may download and cache the package first.
+              </small>
+              <div className="command-examples">
+                <span>npm</span>
+                <code>bunx @scope/server@1.2.3 --transport stdio</code>
+                <span>NuGet</span>
+                <code>dnx Example.Mcp.Server@1.2.3 -- --transport stdio</code>
+              </div>
+            </Field>
           )}
         </>
       )}{' '}
@@ -487,6 +517,7 @@ function ConnectionDetail(p: {
   reload: () => void
 }) {
   const d = p.detail!
+  const bundled = findBundledMcp(d.transport_config)
   const [credentials, setCredentials] = useState<string>()
   const [addingAccount, setAddingAccount] = useState(false)
   const [refreshError, setRefreshError] = useState('')
@@ -509,11 +540,8 @@ function ConnectionDetail(p: {
       <header className="detail-head">
         <h3>Accounts</h3>
         <div className="detail-actions">
-          <button
-            className="primary"
-            onClick={() => setAddingAccount(!addingAccount)}
-          >
-            {addingAccount ? 'Cancel adding' : 'Add Account'}
+          <button className="primary" onClick={() => setAddingAccount(true)}>
+            Add Account
           </button>
           {p.canConnections && (
             <Link
@@ -606,20 +634,24 @@ function ConnectionDetail(p: {
         />
       )}
       {addingAccount && (
-        <BundledMcpSetup entry={findBundledMcp(d.transport_config)} />
-      )}
-      {addingAccount && (
-        <AccountForm
-          key={d.id}
-          connectionId={d.id}
-          shared={p.canAccounts}
-          oauth={d.transport === 'streamable_http'}
-          personalEligible={d.personal_account_eligible}
-          done={() => {
-            setAddingAccount(false)
-            p.reload()
-          }}
-        />
+        <Modal
+          title={`Add account${bundled ? ` to ${bundled.displayName}` : ''}`}
+          close={() => setAddingAccount(false)}
+        >
+          <AccountForm
+            key={d.id}
+            connectionId={d.id}
+            shared={p.canAccounts}
+            oauth={d.transport === 'streamable_http'}
+            personalEligible={d.personal_account_eligible}
+            bundled={bundled}
+            cancel={() => setAddingAccount(false)}
+            done={() => {
+              setAddingAccount(false)
+              p.reload()
+            }}
+          />
+        </Modal>
       )}
     </>
   )
@@ -663,10 +695,7 @@ function EditConnectionForm(p: {
               ? { kind: 'streamable_http', url: String(f.get('url')) }
               : {
                   kind: 'stdio',
-                  command: String(f.get('command')),
-                  args: String(f.get('args') || '')
-                    .split(/\s+/)
-                    .filter(Boolean),
+                  ...parseStdioCommandLine(String(f.get('commandLine'))),
                 },
             state: d.state,
             groupIds: f.getAll('groups').map(String),
@@ -713,25 +742,20 @@ function EditConnectionForm(p: {
                 />
               </Field>
             ) : (
-              <>
-                <Field label="Command">
-                  <input
-                    name="command"
-                    defaultValue={String(transport.command ?? '')}
-                    required
-                  />
-                </Field>
-                <Field label="Arguments">
-                  <input
-                    name="args"
-                    defaultValue={
-                      Array.isArray(transport.args)
-                        ? transport.args.join(' ')
-                        : ''
-                    }
-                  />
-                </Field>
-              </>
+              <Field label="Launch command">
+                <input
+                  name="commandLine"
+                  defaultValue={formatStdioCommandLine(
+                    String(transport.command ?? ''),
+                    Array.isArray(transport.args)
+                      ? transport.args.map(String)
+                      : undefined,
+                  )}
+                  required
+                  spellCheck={false}
+                />
+                <small>CoStack runs this command whenever it connects.</small>
+              </Field>
             )}
             <GroupChecks
               groups={p.groups}
@@ -844,6 +868,8 @@ function AccountForm(p: {
   shared: boolean
   oauth: boolean
   personalEligible: boolean
+  bundled: BundledMcp | undefined
+  cancel: () => void
   done: () => void
 }) {
   const [kind, setKind] = useState<'personal' | 'shared'>('personal')
@@ -852,6 +878,8 @@ function AccountForm(p: {
   return (
     <Form
       submit={manual ? 'Add Account' : 'Sign in with OAuth'}
+      submitIcon={manual ? <AddAccountIcon /> : <OAuthIcon />}
+      cancel={p.cancel}
       disabled={kind === 'personal' && !p.personalEligible}
       go={async (f) => {
         const secrets = manual
@@ -925,7 +953,11 @@ function AccountForm(p: {
       )}
       {manual && (
         <Field label="Credential fields as JSON">
-          <textarea name="secrets" defaultValue="{}" spellCheck={false} />
+          <textarea
+            name="secrets"
+            defaultValue={p.bundled?.manualCredentials ?? '{}'}
+            spellCheck={false}
+          />
         </Field>
       )}
     </Form>
@@ -1212,7 +1244,7 @@ function RegistryPanel(p: {
     </section>
   )
 }
-export function Preferences() {
+export function Preferences({ embedded = false }: { embedded?: boolean }) {
   const [data, setData] = useState<ControlData>()
   useEffect(
     () =>
@@ -1222,8 +1254,9 @@ export function Preferences() {
     [],
   )
   if (!data) return null
-  return (
-    <Page title="Approval Method">
+  const content = (
+    <>
+      {embedded && <h2>Approval method</h2>}
       <p className="note">
         Choose how approval-required tools ask before execution.
       </p>
@@ -1247,8 +1280,9 @@ export function Preferences() {
           </button>
         ))}
       </div>
-    </Page>
+    </>
   )
+  return embedded ? content : <Page title="Approval Method">{content}</Page>
 }
 
 export function Audit() {
@@ -1300,7 +1334,7 @@ export function Audit() {
             className="primary"
             href={`/api/control?download=audit${query ? `&${query}` : ''}`}
           >
-            Download JSONL <b>↓</b>
+            Download JSONL <UiIcon name="download" />
           </a>
         </>
       }
@@ -1451,6 +1485,7 @@ export function Users({ data, reload }: View) {
         </div>
         <Form
           submit="Add user"
+          submitIcon={<AddAccountIcon />}
           go={async (f) => {
             await act('create-access', {
               email: f.get('email'),
@@ -1683,10 +1718,15 @@ export function Services({ data, reload }: View) {
     </Page>
   )
 }
-export function Sso({ data, reload }: View) {
+export function Sso({
+  data,
+  reload,
+  embedded = false,
+}: View & { embedded?: boolean }) {
   const p = data.providers?.[0]
-  return (
-    <Page title="Single sign-on">
+  const content = (
+    <>
+      {embedded && <h2>Single sign-on</h2>}
       <Form
         className="sso-form"
         submit={p ? 'Update provider' : 'Connect provider'}
@@ -1707,6 +1747,25 @@ export function Sso({ data, reload }: View) {
           </Field>
         </div>
       </Form>
+    </>
+  )
+  return embedded ? content : <Page title="Single sign-on">{content}</Page>
+}
+export function Settings() {
+  const view = useControlView()
+  const canManageSso =
+    view.data.authorization?.administrator ||
+    view.data.authorization?.capabilities.includes('manage_sso')
+  return (
+    <Page title="Settings">
+      <section className="settings-section">
+        <Preferences embedded />
+      </section>
+      {canManageSso && (
+        <section className="settings-section">
+          <Sso {...view} embedded />
+        </section>
+      )}
     </Page>
   )
 }
@@ -1784,7 +1843,10 @@ function Login({ providerId }: { providerId: string | undefined }) {
             else setError('SSO is not configured')
           }}
         >
-          Continue with SSO <b>→</b>
+          Continue with SSO{' '}
+          <span className="button-icon">
+            <OAuthIcon />
+          </span>
         </button>
         <div className="or">recovery or development</div>
         <form
@@ -1937,8 +1999,10 @@ function Form(p: {
   disabled?: boolean
   go: (f: FormData) => Promise<void>
   submit: string
+  submitIcon?: ReactNode
   title?: string
   compact?: boolean
+  cancel?: () => void
   children: ReactNode
 }) {
   const [error, setError] = useState('')
@@ -1991,9 +2055,16 @@ function Form(p: {
         </div>
       ) : (
         <>
+          {p.cancel && (
+            <button type="button" className="secondary" onClick={p.cancel}>
+              Cancel
+            </button>
+          )}
           <button className="primary" disabled={submitting || p.disabled}>
             {submitting ? 'Saving…' : p.submit}
-            <b>→</b>
+            <b className="button-icon">
+              {p.submitIcon ?? <UiIcon name="arrowRight" />}
+            </b>
           </button>
           {error && <p className="error">{error}</p>}
         </>
@@ -2005,6 +2076,42 @@ function Form(p: {
         </div>
       )}
     </form>
+  )
+}
+
+function AddAccountIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M15 19a6 6 0 00-12 0M9 11a4 4 0 100-8 4 4 0 000 8M19 8v6M16 11h6" />
+    </svg>
+  )
+}
+
+function OAuthIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M10 17l5-5-5-5M15 12H3M14 4h5a2 2 0 012 2v12a2 2 0 01-2 2h-5" />
+    </svg>
+  )
+}
+
+function Modal(p: { title: string; close: () => void; children: ReactNode }) {
+  const ref = useRef<HTMLDialogElement>(null)
+  useEffect(() => ref.current?.showModal(), [])
+  return (
+    <dialog className="modal" ref={ref} onCancel={p.close}>
+      <header>
+        <h2>{p.title}</h2>
+        <button
+          aria-label="Close"
+          className="close-connection"
+          onClick={p.close}
+        >
+          <UiIcon name="close" />
+        </button>
+      </header>
+      {p.children}
+    </dialog>
   )
 }
 async function act(action: string, body: Record<string, unknown> = {}) {
@@ -2178,7 +2285,8 @@ export function ConfigureConnectionPage({
               to="/connections"
               search={{ connection: connectionId }}
             >
-              ← Back to {d.builtin ? 'Connections' : 'Accounts'}
+              <UiIcon name="arrowLeft" /> Back to{' '}
+              {d.builtin ? 'Connections' : 'Accounts'}
             </Link>
           </>
         }

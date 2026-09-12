@@ -109,3 +109,9 @@ test('catalog entries have unique IDs, vendor documentation, and setup instructi
       expect(new URL(entry.transport.url).protocol).toBe('https:')
   }
 })
+
+test('prefills Linear manual credentials with its authorization header', () => {
+  expect(
+    bundledMcps.find((entry) => entry.id === 'linear')?.manualCredentials,
+  ).toBe('{"Authorization":"Bearer YOUR_LINEAR_API_KEY"}')
+})

@@ -99,7 +99,7 @@ function registryTransport(server: RegistryServer['server']): TransportConfig {
     }
   return {
     kind: 'stdio',
-    command: 'dotnet',
-    args: ['tool', 'run', pkg.identifier, '--', ...values],
+    command: 'dnx',
+    args: [`${pkg.identifier}@${pkg.version}`, '--', ...values],
   }
 }

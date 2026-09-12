@@ -1,9 +1,7 @@
-import { createFileRoute } from '@tanstack/react-router'
-import { Sso, useControlView } from '../components/control-app'
+import { createFileRoute, redirect } from '@tanstack/react-router'
 
-export const Route = createFileRoute('/_app/sso')({ component: Page })
-
-function Page() {
-  const view = useControlView()
-  return <Sso {...view} />
-}
+export const Route = createFileRoute('/_app/sso')({
+  beforeLoad: () => {
+    throw redirect({ to: '/preferences', replace: true })
+  },
+})

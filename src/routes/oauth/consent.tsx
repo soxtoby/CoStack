@@ -1,5 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { useState } from 'react'
+import { UiIcon } from '../../components/ui-icon'
 
 export const Route = createFileRoute('/oauth/consent')({ component: Consent })
 function Consent() {
@@ -32,7 +33,9 @@ function Consent() {
           on your behalf.
         </p>
         <div className="scope">
-          <b>✓ &nbsp; Use approved MCP tools</b>
+          <b>
+            <UiIcon name="check" /> Use approved MCP tools
+          </b>
           <small>
             Access still follows your current Groups and Tool Policies.
           </small>
@@ -53,7 +56,7 @@ function Consent() {
             disabled={busy}
             onClick={() => decide(true)}
           >
-            Allow access →
+            Allow access <UiIcon name="check" />
           </button>
         </footer>
       </section>

@@ -171,4 +171,31 @@ describe('registry import', () => {
     expect(result.policies).toEqual([{ pattern: '*', effect: 'block' }])
     expect(result.state).toBe('disabled')
   })
+
+  test('creates a dnx command for a NuGet tool package', () => {
+    const registry = new RegistryClient()
+    const result = registry.prefill(
+      {
+        server: {
+          name: 'com.example/server',
+          version: '1.2.3',
+          packages: [
+            {
+              registryType: 'nuget',
+              identifier: 'Example.Mcp.Server',
+              version: '1.2.3',
+              packageArguments: [{ value: '--transport' }, { value: 'stdio' }],
+            },
+          ],
+        },
+      },
+      'org',
+      'registry',
+    )
+    expect(result.transport).toEqual({
+      kind: 'stdio',
+      command: 'dnx',
+      args: ['Example.Mcp.Server@1.2.3', '--', '--transport', 'stdio'],
+    })
+  })
 })

@@ -11,6 +11,7 @@ export type BundledMcp = {
   transport: TransportConfig
   documentationUrl: string
   setup: string
+  manualCredentials?: string
   registryIds: Array<string>
 }
 
@@ -85,8 +86,8 @@ export const bundledMcps: Array<BundledMcp> = [
       url: 'https://mcp.linear.app/mcp',
     },
     documentationUrl: 'https://linear.app/docs/mcp',
-    setup:
-      'After saving, choose Add Account to authorize with Linear. Alternatively, choose Use manual credentials instead and enter {"Authorization":"Bearer YOUR_LINEAR_API_KEY"} using a Linear API key with the permissions you need. Configure the discovered tools and make the connection available.',
+    setup: 'Connect using Linear OAuth or a personal API key.',
+    manualCredentials: '{"Authorization":"Bearer YOUR_LINEAR_API_KEY"}',
     registryIds: [],
   },
 ]

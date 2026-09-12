@@ -15,6 +15,6 @@ export const Route = createFileRoute('/')({
         replace: true,
       })
     }
-    throw redirect({ to: '/overview', replace: true })
+    throw redirect({ to: '/connections', replace: true })
   },
 })

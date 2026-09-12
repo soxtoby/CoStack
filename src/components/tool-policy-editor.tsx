@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { UiIcon } from './ui-icon'
 import {
   evaluateToolPolicy,
   setToolPolicy,
@@ -251,7 +252,7 @@ export function ToolPolicyEditor(p: {
                     aria-label="Close tool description"
                     onClick={() => setSelected(undefined)}
                   >
-                    ×
+                    <UiIcon name="close" />
                   </button>
                 </div>
                 <p>{selectedTool.description || 'No description provided.'}</p>
