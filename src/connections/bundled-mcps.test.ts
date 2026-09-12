@@ -18,7 +18,7 @@ test('finds GitHub immediately and by name, alias, or multiple words', () => {
   expect(searchBundledMcps('unrelatedxyz')).toEqual([])
 })
 
-test('prefills a disabled blocked connection without registry access or fictional provenance', () => {
+test('prefills an enabled blocked connection without registry access or fictional provenance', () => {
   const github = bundledMcps.find((entry) => entry.id === 'github')!
   const input = bundledPrefill(github, 'org')
   expect(input).toEqual({
@@ -28,7 +28,7 @@ test('prefills a disabled blocked connection without registry access or fictiona
       kind: 'streamable_http',
       url: 'https://api.githubcopilot.com/mcp/',
     },
-    state: 'disabled',
+    state: 'enabled',
     groupIds: [],
     policies: [{ pattern: '*', effect: 'block' }],
   })

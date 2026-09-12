@@ -63,7 +63,7 @@ export class RegistryClient {
       organizationId,
       displayName: server.title || server.name.split('/').at(-1) || server.name,
       transport: registryTransport(server),
-      state: 'disabled',
+      state: 'enabled',
       groupIds: [],
       policies: [{ pattern: '*', effect: 'block' }],
       registry: { sourceId, serverId: server.name, version: server.version },

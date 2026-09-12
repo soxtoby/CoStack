@@ -66,7 +66,7 @@ export class ConnectionManager {
 
   async create(input: ConnectionInput) {
     validateInput(input)
-    const discovery = await this.discoverForSave(input.transport, input.state)
+    const discovery = await this.discoverForSave(input.transport)
     const id = randomUUID()
     const namespace = input.namespace ?? namespaceOf(input.displayName)
     await this.transaction(async (database) => {
@@ -156,7 +156,7 @@ export class ConnectionManager {
       displayName,
       ...(namespace ? { namespace } : {}),
       transport: source.transport_config as TransportConfig,
-      state: 'disabled',
+      state: 'enabled',
       groupIds: groups.rows.map((row) => row.group_id as string),
       policies: policies.rows.map((row) => ({
         pattern: row.pattern as string,
@@ -165,8 +165,7 @@ export class ConnectionManager {
     })
   }
 
-  async setEnabled(id: string, enabled: boolean, userId?: string) {
-    if (enabled) await this.refreshConnection(id, userId)
+  async setEnabled(id: string, enabled: boolean) {
     const result = await this.pool.query(
       `UPDATE mcp_connections SET state=$1, revision=revision+1, updated_at=now()
        WHERE id=$2 RETURNING revision`,
@@ -427,14 +426,11 @@ export class ConnectionManager {
     return { tools: [], error: message }
   }
 
-  private async discoverForSave(
-    config: TransportConfig,
-    state: ConnectionInput['state'],
-  ) {
+  private async discoverForSave(config: TransportConfig) {
     try {
       return { tools: await this.probe(config) }
     } catch (error) {
-      if (state === 'enabled') throw error
+      // Accounts can only be added after the connection has been saved.
       return {
         tools: [],
         error: error instanceof Error ? error.message : 'Tool discovery failed',

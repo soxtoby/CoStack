@@ -31,7 +31,7 @@ export const bundledMcps: Array<BundledMcp> = [
     documentationUrl:
       'https://github.com/github/github-mcp-server/blob/main/docs/remote-server.md',
     setup:
-      'After saving, choose Add Account and Use manual credentials instead. Enter {"Authorization":"Bearer YOUR_GITHUB_TOKEN"} in the credentials JSON, using a GitHub personal access token with access to the repositories you need. Then configure the discovered tools and make the connection available.',
+      'After saving, choose Add Account and Use manual credentials instead. Enter {"Authorization":"Bearer YOUR_GITHUB_TOKEN"} in the credentials JSON, using a GitHub personal access token with access to the repositories you need. Then configure the discovered tools.',
     registryIds: ['io.github.github/github-mcp-server'],
   },
   {
@@ -47,7 +47,7 @@ export const bundledMcps: Array<BundledMcp> = [
     },
     documentationUrl: 'https://docs.slack.dev/ai/slack-mcp-server/',
     setup:
-      'Requires an internal or Slack Marketplace app; unlisted apps cannot use MCP. After saving, open Advanced OAuth application and enter your Slack app’s Client ID, Client secret, and user scopes for the tools you need. Register the gateway’s OAuth callback URL in your Slack app, then choose Add Account to authorize. Slack does not support dynamic client registration. Configure the discovered tools and make the connection available.',
+      'Requires an internal or Slack Marketplace app; unlisted apps cannot use MCP. After saving, open Advanced OAuth application and enter your Slack app’s Client ID, Client secret, and user scopes for the tools you need. Register the gateway’s OAuth callback URL in your Slack app, then choose Add Account to authorize. Slack does not support dynamic client registration. Configure the discovered tools.',
     registryIds: [],
   },
   {
@@ -64,7 +64,7 @@ export const bundledMcps: Array<BundledMcp> = [
     documentationUrl:
       'https://learn.microsoft.com/en-us/microsoft-copilot-studio/mcp-teams-tools',
     setup:
-      'Before saving, enter your Microsoft Entra tenant ID in the tenant ID field. Requires an eligible Agent 365 Frontier tenant and administrator consent for the Agent 365 Tools permission McpServers.Teams.All. After saving, choose Add Account and Use manual credentials instead. Enter {"Authorization":"Bearer YOUR_AGENT_365_ACCESS_TOKEN"} using an access token for Agent 365 Tools with that permission. Replace the token when it expires. Configure the discovered tools and make the connection available.',
+      'Before saving, enter your Microsoft Entra tenant ID in the tenant ID field. Requires an eligible Agent 365 Frontier tenant and administrator consent for the Agent 365 Tools permission McpServers.Teams.All. After saving, choose Add Account and Use manual credentials instead. Enter {"Authorization":"Bearer YOUR_AGENT_365_ACCESS_TOKEN"} using an access token for Agent 365 Tools with that permission. Replace the token when it expires. Configure the discovered tools.',
     registryIds: [],
   },
   {
@@ -115,7 +115,7 @@ export function bundledPrefill(
     organizationId,
     displayName: entry.displayName,
     transport: structuredClone(entry.transport),
-    state: 'disabled',
+    state: 'enabled',
     groupIds: [],
     policies: [{ pattern: '*', effect: 'block' }],
   }

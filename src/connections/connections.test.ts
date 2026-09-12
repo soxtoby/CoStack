@@ -141,7 +141,7 @@ describe('registry import', () => {
       kind: 'streamable_http',
       url: 'https://mcp.example.test/mcp',
     })
-    expect(input.state).toBe('disabled')
+    expect(input.state).toBe('enabled')
   })
 
   test('creates an unsaved, blocked Bun connection prefill', () => {
@@ -169,7 +169,7 @@ describe('registry import', () => {
       args: ['@example/github-mcp@1.2.3'],
     })
     expect(result.policies).toEqual([{ pattern: '*', effect: 'block' }])
-    expect(result.state).toBe('disabled')
+    expect(result.state).toBe('enabled')
   })
 
   test('creates a dnx command for a NuGet tool package', () => {

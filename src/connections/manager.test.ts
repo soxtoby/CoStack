@@ -53,6 +53,53 @@ afterAll(async () => {
 })
 
 describe('ConnectionManager', () => {
+  test('saves enabled connections before credentials are available', async () => {
+    const local = new ConnectionManager(pool, vault, () =>
+      Promise.reject(new Error('Authentication required')),
+    )
+    let connectionId: string | undefined
+    try {
+      const created = await local.create({
+        organizationId: 'org',
+        displayName: 'Needs credentials',
+        transport: { kind: 'streamable_http', url: 'https://mcp.example.test' },
+        groupIds: ['group'],
+        policies: [{ pattern: '*', effect: 'block' }],
+        state: 'enabled',
+      })
+      connectionId = created.id
+      expect(created.tools).toEqual([])
+      expect(
+        (
+          await pool.query(
+            `SELECT c.state,h.healthy,h.error FROM mcp_connections c
+           JOIN connection_health h ON h.connection_id=c.id WHERE c.id=$1`,
+            [created.id],
+          )
+        ).rows,
+      ).toEqual([
+        { state: 'enabled', healthy: false, error: 'Authentication required' },
+      ])
+      await local.setEnabled(created.id, false)
+      expect(await local.setEnabled(created.id, true)).toBe(3)
+      expect(
+        (
+          await pool.query(
+            `SELECT c.state,h.healthy FROM mcp_connections c
+           JOIN connection_health h ON h.connection_id=c.id WHERE c.id=$1`,
+            [created.id],
+          )
+        ).rows,
+      ).toEqual([{ state: 'enabled', healthy: false }])
+    } finally {
+      await local.close()
+      if (connectionId)
+        await pool.query('DELETE FROM mcp_connections WHERE id=$1', [
+          connectionId,
+        ])
+    }
+  })
+
   test('saves policy edits without rediscovery or changing transport, Groups, or tool inventory', async () => {
     let connectionId: string | undefined
     let discoveries = 0

@@ -188,14 +188,14 @@ describe('upstream OAuth', () => {
     else process.env.APPLICATION_URL = previousUrl
     try {
       await connectedManager.refreshConnection(connection.id, 'user')
-      await connectedManager.setEnabled(connection.id, true, 'user')
+      await connectedManager.setEnabled(connection.id, true)
       await connectedManager.callAccountTool(
         connection.id,
         account.id,
         'read_issue',
         {},
       )
-      expect(connections).toBe(3)
+      expect(connections).toBe(2)
     } finally {
       await connectedManager.close()
     }

@@ -366,7 +366,7 @@ export function ConnectionSummary(p: {
         {c.builtin ? <small>Gateway MCP</small> : <code>{c.namespace}__*</code>}
       </span>
       <Status ok={c.state === 'enabled'}>
-        {c.state === 'enabled' ? 'Available' : 'Not available'}
+        {c.state === 'enabled' ? 'Enabled' : 'Disabled'}
       </Status>
       <span className="account-count">
         {c.builtin
@@ -417,7 +417,7 @@ export function ConnectionForm(p: {
                   String(f.get('tenantId') ?? ''),
                 )
               : transport,
-            state: 'disabled',
+            state: 'enabled',
             groupIds: f.getAll('groups').map(String),
             policies,
             registry: p.initial?.registry,
@@ -554,7 +554,6 @@ function ConnectionDetail(p: {
   const bundled = findBundledMcp(d.transport_config)
   const [credentials, setCredentials] = useState<string>()
   const [addingAccount, setAddingAccount] = useState(false)
-  const [refreshError, setRefreshError] = useState('')
   if (d.builtin)
     return (
       <header className="detail-head">
@@ -589,11 +588,6 @@ function ConnectionDetail(p: {
           )}
         </div>
       </header>
-      {refreshError && (
-        <p className="error" role="alert">
-          {refreshError}
-        </p>
-      )}{' '}
       {d.accounts.length === 0 && (
         <p>
           No Accounts yet. Choose Add Account to sign in to this connection.
@@ -620,28 +614,8 @@ function ConnectionDetail(p: {
               {a.has_secret ? 'Ready' : 'Needs credentials'}
             </Status>
             <button className="secondary" onClick={() => setCredentials(a.id)}>
-              Credentials
+              Reconfigure
             </button>
-            {d.transport === 'streamable_http' && (
-              <button
-                className="secondary"
-                onClick={async () => {
-                  setRefreshError('')
-                  try {
-                    const result = await upstreamOAuthStart(a.id)
-                    location.assign(result.authorizationUrl)
-                  } catch (e) {
-                    setRefreshError(
-                      e instanceof Error
-                        ? e.message
-                        : 'Could not start sign-in',
-                    )
-                  }
-                }}
-              >
-                Sign in with OAuth
-              </button>
-            )}
             <button
               className="danger"
               onClick={() =>
@@ -659,13 +633,25 @@ function ConnectionDetail(p: {
         ))}
       </div>
       {credentials && (
-        <CredentialForm
-          account={d.accounts.find((a) => a.id === credentials)!}
-          done={() => {
-            setCredentials(undefined)
-            p.reload()
-          }}
-        />
+        <Modal
+          title="Reconfigure account"
+          close={() => setCredentials(undefined)}
+        >
+          <AccountForm
+            key={credentials}
+            account={d.accounts.find((a) => a.id === credentials)!}
+            connectionId={d.id}
+            shared={p.canAccounts}
+            oauth={d.transport === 'streamable_http'}
+            personalEligible={d.personal_account_eligible}
+            bundled={bundled}
+            cancel={() => setCredentials(undefined)}
+            done={() => {
+              setCredentials(undefined)
+              p.reload()
+            }}
+          />
+        </Modal>
       )}
       {addingAccount && (
         <Modal
@@ -828,44 +814,6 @@ function EditConnectionForm(p: {
   )
 }
 
-function CredentialForm(p: {
-  account: NonNullable<ControlData['detail']>['accounts'][number]
-  done: () => void
-}) {
-  const prefix = p.account.kind === 'shared' ? 'shared' : 'personal'
-  return (
-    <Form
-      compact
-      title={`Credentials for ${p.account.display_name}`}
-      submit="Replace credentials"
-      go={async (f) => {
-        await controlAct(`replace-${prefix}-secret`, {
-          id: p.account.id,
-          secrets: JSON.parse(String(f.get('secrets') || '{}')),
-        })
-        p.done()
-      }}
-    >
-      <Field label="Credential fields as JSON">
-        <textarea name="secrets" defaultValue="{}" spellCheck={false} />
-      </Field>
-      {p.account.has_secret && (
-        <button
-          type="button"
-          className="danger"
-          onClick={() =>
-            controlAct(`delete-${prefix}-secret`, { id: p.account.id }).then(
-              p.done,
-            )
-          }
-        >
-          Clear saved credentials
-        </button>
-      )}
-    </Form>
-  )
-}
-
 function OAuthClientForm(p: { connectionId: string; done: () => void }) {
   return (
     <Form
@@ -898,6 +846,7 @@ function OAuthClientForm(p: { connectionId: string; done: () => void }) {
 }
 
 function AccountForm(p: {
+  account?: NonNullable<ControlData['detail']>['accounts'][number]
   connectionId: string
   shared: boolean
   oauth: boolean
@@ -906,31 +855,47 @@ function AccountForm(p: {
   cancel: () => void
   done: () => void
 }) {
-  const [kind, setKind] = useState<'personal' | 'shared'>('personal')
+  const [kind, setKind] = useState<'personal' | 'shared'>(
+    p.account?.kind ?? 'personal',
+  )
   const [manual, setManual] = useState(!p.oauth)
   const [createdId, setCreatedId] = useState<string>()
   return (
     <Form
-      submit={manual ? 'Add Account' : 'Sign in with OAuth'}
+      submit={
+        manual
+          ? p.account
+            ? 'Save credentials'
+            : 'Add Account'
+          : 'Sign in with OAuth'
+      }
       submitIcon={manual ? <AddAccountIcon /> : <OAuthIcon />}
       cancel={p.cancel}
-      disabled={kind === 'personal' && !p.personalEligible}
+      disabled={!p.account && kind === 'personal' && !p.personalEligible}
       go={async (f) => {
         const secrets = manual
           ? JSON.parse(String(f.get('secrets') || '{}'))
           : undefined
-        const account = createdId
-          ? { id: createdId }
-          : await controlAct(
-              kind === 'shared'
-                ? 'create-shared-account'
-                : 'create-personal-account',
-              {
-                connectionId: p.connectionId,
-                displayName: String(f.get('displayName')),
-                secrets,
-              },
-            )
+        const account =
+          p.account ??
+          (createdId
+            ? { id: createdId }
+            : await controlAct(
+                kind === 'shared'
+                  ? 'create-shared-account'
+                  : 'create-personal-account',
+                {
+                  connectionId: p.connectionId,
+                  displayName: String(f.get('displayName')),
+                  secrets,
+                },
+              ))
+        if (manual && p.account) {
+          await controlAct(`replace-${kind}-secret`, {
+            id: account.id,
+            secrets,
+          })
+        }
         if (!manual) {
           setCreatedId(account.id)
           const result = await upstreamOAuthStart(account.id)
@@ -944,11 +909,11 @@ function AccountForm(p: {
         <input
           name="displayName"
           required
-          defaultValue="My account"
-          readOnly={!!createdId}
+          defaultValue={p.account?.display_name ?? 'My account'}
+          readOnly={!!p.account || !!createdId}
         />
       </Field>
-      {p.shared && (
+      {p.shared && !p.account && (
         <div className="segmented">
           <button
             type="button"
@@ -1069,7 +1034,7 @@ function RegistryPanel(p: {
         )}
         <p>
           Choose a local name and Group access, then save. After saving, add an
-          Account, configure Tool Policies, and make the connection available.
+          Account and configure Tool Policies.
         </p>
         <ConnectionForm
           data={p.data}
@@ -2443,7 +2408,7 @@ export function ConfigureConnectionPage({
         actions={
           <>
             <Status ok={d.state === 'enabled'}>
-              {d.state === 'enabled' ? 'Available' : 'Not available'}
+              {d.state === 'enabled' ? 'Enabled' : 'Disabled'}
             </Status>
             <Link
               className="secondary"
@@ -2498,7 +2463,7 @@ export function ConfigureConnectionPage({
                   void run('set-enabled', { enabled: d.state !== 'enabled' })
                 }
               >
-                {d.state === 'enabled' ? 'Pause access' : 'Make available'}
+                {d.state === 'enabled' ? 'Disable' : 'Enable'}
               </button>
             ))}
         </div>
