@@ -32,6 +32,8 @@ export const auth = betterAuth({
       scopes: ['openid', 'profile', 'email', 'offline_access', 'mcp:use'],
       accessTokenExpiresIn: 15 * 60,
       m2mAccessTokenExpiresIn: 10 * 60,
+      allowDynamicClientRegistration: true,
+      allowUnauthenticatedClientRegistration: true,
     }) as unknown as BetterAuthPlugin,
   ],
 })

@@ -14,6 +14,7 @@ import { Route as AppRouteImport } from './routes/_app'
 import { Route as AccessDeniedRouteImport } from './routes/access-denied'
 import { Route as HealthRouteImport } from './routes/health'
 import { Route as McpRouteImport } from './routes/mcp'
+import { Route as DotwellKnownSplatRouteImport } from './routes/[.]well-known.$'
 import { Route as AppAuditRouteImport } from './routes/_app.audit'
 import { Route as AppConnectionsRouteImport } from './routes/_app.connections'
 import { Route as AppGroupsRouteImport } from './routes/_app.groups'
@@ -55,6 +56,11 @@ const HealthRoute = HealthRouteImport.update({
 const McpRoute = McpRouteImport.update({
   id: '/mcp',
   path: '/mcp',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DotwellKnownSplatRoute = DotwellKnownSplatRouteImport.update({
+  id: '/.well-known/$',
+  path: '/.well-known/$',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AppAuditRoute = AppAuditRouteImport.update({
@@ -155,6 +161,7 @@ export interface FileRoutesByFullPath {
   '/access-denied': typeof AccessDeniedRoute
   '/health': typeof HealthRoute
   '/mcp': typeof McpRoute
+  '/.well-known/$': typeof DotwellKnownSplatRoute
   '/audit': typeof AppAuditRoute
   '/connections': typeof AppConnectionsRoute
   '/groups': typeof AppGroupsRoute
@@ -179,6 +186,7 @@ export interface FileRoutesByTo {
   '/access-denied': typeof AccessDeniedRoute
   '/health': typeof HealthRoute
   '/mcp': typeof McpRoute
+  '/.well-known/$': typeof DotwellKnownSplatRoute
   '/audit': typeof AppAuditRoute
   '/connections': typeof AppConnectionsRoute
   '/groups': typeof AppGroupsRoute
@@ -205,6 +213,7 @@ export interface FileRoutesById {
   '/access-denied': typeof AccessDeniedRoute
   '/health': typeof HealthRoute
   '/mcp': typeof McpRoute
+  '/.well-known/$': typeof DotwellKnownSplatRoute
   '/_app/audit': typeof AppAuditRoute
   '/_app/connections': typeof AppConnectionsRoute
   '/_app/groups': typeof AppGroupsRoute
@@ -231,6 +240,7 @@ export interface FileRouteTypes {
     | '/access-denied'
     | '/health'
     | '/mcp'
+    | '/.well-known/$'
     | '/audit'
     | '/connections'
     | '/groups'
@@ -255,6 +265,7 @@ export interface FileRouteTypes {
     | '/access-denied'
     | '/health'
     | '/mcp'
+    | '/.well-known/$'
     | '/audit'
     | '/connections'
     | '/groups'
@@ -280,6 +291,7 @@ export interface FileRouteTypes {
     | '/access-denied'
     | '/health'
     | '/mcp'
+    | '/.well-known/$'
     | '/_app/audit'
     | '/_app/connections'
     | '/_app/groups'
@@ -306,6 +318,7 @@ export interface RootRouteChildren {
   AccessDeniedRoute: typeof AccessDeniedRoute
   HealthRoute: typeof HealthRoute
   McpRoute: typeof McpRoute
+  DotwellKnownSplatRoute: typeof DotwellKnownSplatRoute
   ApiAdminRoute: typeof ApiAdminRoute
   ApiControlRoute: typeof ApiControlRoute
   OauthConsentRoute: typeof OauthConsentRoute
@@ -350,6 +363,13 @@ declare module '@tanstack/react-router' {
       path: '/mcp'
       fullPath: '/mcp'
       preLoaderRoute: typeof McpRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/.well-known/$': {
+      id: '/.well-known/$'
+      path: '/.well-known/$'
+      fullPath: '/.well-known/$'
+      preLoaderRoute: typeof DotwellKnownSplatRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_app/audit': {
@@ -518,6 +538,7 @@ const rootRouteChildren: RootRouteChildren = {
   AccessDeniedRoute: AccessDeniedRoute,
   HealthRoute: HealthRoute,
   McpRoute: McpRoute,
+  DotwellKnownSplatRoute: DotwellKnownSplatRoute,
   ApiAdminRoute: ApiAdminRoute,
   ApiControlRoute: ApiControlRoute,
   OauthConsentRoute: OauthConsentRoute,

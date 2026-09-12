@@ -9,5 +9,11 @@ describe('gateway HTTP boundary', () => {
       source.indexOf('serverEntry.fetch'),
     )
     expect(source).toContain("url.pathname.startsWith('/.well-known/')")
+
+    const developmentRoute = await Bun.file(
+      new URL('../routes/[.]well-known.$.ts', import.meta.url),
+    ).text()
+    expect(developmentRoute).toContain("createFileRoute('/.well-known/$')")
+    expect(developmentRoute).toContain('authHandler(request)')
   })
 })

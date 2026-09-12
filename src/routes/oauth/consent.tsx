@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { UiIcon } from '../../components/ui-icon'
 
 export const Route = createFileRoute('/oauth/consent')({ component: Consent })
@@ -8,6 +8,14 @@ function Consent() {
     typeof location === 'undefined' ? '' : location.search,
   )
   const [busy, setBusy] = useState(false)
+  const [clientName, setClientName] = useState<string>()
+  const clientId = q.get('client_id')
+  useEffect(() => {
+    if (!clientId) return
+    void loadOAuthClientName(clientId).then(setClientName, () =>
+      setClientName(undefined),
+    )
+  }, [clientId])
   async function decide(accept: boolean) {
     setBusy(true)
     const r = await fetch('/api/auth/oauth2/consent', {
@@ -29,8 +37,8 @@ function Consent() {
         <code>MCP AUTHORIZATION</code>
         <h1>Open the gateway?</h1>
         <p>
-          <b>{q.get('client_name') ?? 'An MCP Client'}</b> is requesting access
-          on your behalf.
+          <b>{clientName ?? 'An MCP Client'}</b> is requesting access on your
+          behalf.
         </p>
         <div className="scope">
           <b>
@@ -62,4 +70,21 @@ function Consent() {
       </section>
     </main>
   )
+}
+
+export async function loadOAuthClientName(
+  clientId: string,
+  request: (
+    input: RequestInfo | URL,
+    init?: RequestInit,
+  ) => Promise<Response> = fetch,
+) {
+  const response = await request(
+    `/api/auth/oauth2/public-client?client_id=${encodeURIComponent(clientId)}`,
+  )
+  if (!response.ok) return undefined
+  const client = (await response.json()) as { client_name?: unknown }
+  return typeof client.client_name === 'string' && client.client_name.trim()
+    ? client.client_name
+    : undefined
 }
