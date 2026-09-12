@@ -2,18 +2,45 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod/v4'
 import { evaluateToolPolicy } from '../connections/policy'
 import { GatewayError } from './service'
+import { builtinTools } from './builtin-tools'
 import type { GatewayService } from './service'
 import type { GatewayPrincipal, GatewayTool } from './types'
 import type { ToolPolicy } from '../connections/types'
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
 
-export function createGatewayServer(
+export async function createGatewayServer(
   service: GatewayService,
   principal: GatewayPrincipal,
   clientId?: string,
   policies: Array<ToolPolicy> = [{ pattern: '*', effect: 'allow' }],
 ) {
-  const server = new McpServer({ name: 'costack', version: '0.1.0' })
+  const searchPolicy = evaluateToolPolicy(policies, 'search_tools')
+  const connectionNames =
+    searchPolicy === 'allow'
+      ? [
+          ...new Set(
+            (await service.search(principal)).map(
+              (tool) => tool.connectionName,
+            ),
+          ),
+        ].sort()
+      : []
+  const server = new McpServer(
+    { name: 'costack', version: '0.1.0' },
+    {
+      instructions:
+        'CoStack provides access to connected services through discovery and execution tools. ' +
+        (searchPolicy === 'block'
+          ? 'Tool discovery is currently blocked by policy. '
+          : 'For tasks involving external services, use search_tools to check available capabilities before reporting that access is unavailable. Search for the service and requested operation together, with those terms first; omit task filters such as assignee and recency. Search results include complete schemas: invoke a matching result through the call tools without searching again to confirm it. Reuse discovered tools for subsequent calls. If no tool matches, remove query terms to broaden the search. ') +
+        'Use the returned qualifiedName and inputSchema to construct calls. Respect availability and approval requirements. ' +
+        (principal.kind === 'service_account'
+          ? 'Service Accounts cannot invoke approval-required tools.'
+          : principal.approvalMethod === 'client_managed'
+            ? 'For require_approval results, obtain user approval for the exact call, then use call_tool_with_approval. Otherwise use call_tool.'
+            : 'Use call_tool; the gateway requests approval when required.'),
+    },
+  )
   async function authorize(name: string, signal: AbortSignal) {
     const effect = evaluateToolPolicy(await service.builtinToolPolicies(), name)
     if (effect === 'block')
@@ -56,8 +83,20 @@ export function createGatewayServer(
     server.registerTool(
       'search_tools',
       {
-        description: 'Search tools available through this gateway',
-        inputSchema: { query: z.string().optional().default('') },
+        description:
+          builtinTools[0]!.description +
+          (connectionNames.length
+            ? ` Connected services (display names): ${JSON.stringify(connectionNames)}.`
+            : ''),
+        inputSchema: {
+          query: z
+            .string()
+            .describe(
+              'Task-specific keywords with service and operation first, e.g. "linear list teams". Omit filters such as assignee and recency. Terms match service name, tool name, account name, or description case-insensitively. Omit only to list the full accessible catalog.',
+            )
+            .optional()
+            .default(''),
+        },
       },
       async ({ query }, extra) => {
         await authorize('search_tools', extra.signal)
@@ -65,14 +104,18 @@ export function createGatewayServer(
       },
     )
   const callSchema = {
-    name: z.string(),
-    arguments: z.record(z.string(), z.unknown()).optional().default({}),
+    name: z.string().describe('Exact qualifiedName returned by search_tools.'),
+    arguments: z
+      .record(z.string(), z.unknown())
+      .describe('Arguments matching the discovered tool inputSchema.')
+      .optional()
+      .default({}),
   }
   if (evaluateToolPolicy(policies, 'call_tool') !== 'block')
     server.registerTool(
       'call_tool',
       {
-        description: 'Call an allowed gateway tool',
+        description: builtinTools[1]!.description,
         inputSchema: callSchema,
       },
       async ({ name, arguments: args }, extra) => {
@@ -107,7 +150,7 @@ export function createGatewayServer(
     server.registerTool(
       'call_tool_with_approval',
       {
-        description: 'Call a tool after the client has obtained user approval',
+        description: builtinTools[2]!.description,
         inputSchema: callSchema,
         annotations: {
           title: 'Call tool with approval',

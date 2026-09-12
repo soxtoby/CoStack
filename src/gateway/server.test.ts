@@ -6,6 +6,47 @@ import { createGatewayServer } from './server'
 import type { GatewayService } from './service'
 import type { ToolPolicy } from '../connections/types'
 
+test('restricted discovery does not load or advertise connected services', async () => {
+  for (const effect of ['block', 'require_approval'] as const) {
+    const service = {
+      search: () => {
+        throw new Error('Discovery must not run without authorization')
+      },
+    } as unknown as GatewayService
+    const server = await createGatewayServer(
+      service,
+      {
+        id: 'user',
+        organizationId: 'org',
+        displayName: 'User',
+        kind: 'user',
+        approvalMethod: 'gateway_enforced',
+      },
+      undefined,
+      [
+        { pattern: '*', effect: 'allow' },
+        { pattern: 'search_tools', effect },
+      ],
+    )
+    const client = new Client({ name: 'test', version: '1' })
+    const [clientTransport, serverTransport] =
+      InMemoryTransport.createLinkedPair()
+    await server.connect(serverTransport)
+    await client.connect(clientTransport)
+    try {
+      const search = (await client.listTools()).tools.find(
+        (tool) => tool.name === 'search_tools',
+      )
+      expect(Boolean(search)).toBe(effect !== 'block')
+      expect(search?.description ?? '').not.toContain('Connected services')
+      expect(client.getInstructions()).toContain('gateway requests approval')
+    } finally {
+      await client.close()
+      await server.close()
+    }
+  }
+})
+
 test('built-in policies control discovery, calls, and approval before execution', async () => {
   let policies: Array<ToolPolicy> = [
     { pattern: '*', effect: 'allow' },
@@ -20,7 +61,7 @@ test('built-in policies control discovery, calls, and approval before execution'
       return Promise.resolve([])
     },
   } as unknown as GatewayService
-  const server = createGatewayServer(
+  const server = await createGatewayServer(
     service,
     {
       id: 'user',
@@ -46,6 +87,7 @@ test('built-in policies control discovery, calls, and approval before execution'
     InMemoryTransport.createLinkedPair()
   await server.connect(serverTransport)
   await client.connect(clientTransport)
+  searches = 0
   try {
     expect((await client.listTools()).tools.map((tool) => tool.name)).toEqual([
       'search_tools',

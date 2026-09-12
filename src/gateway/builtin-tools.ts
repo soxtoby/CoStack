@@ -7,12 +7,18 @@ export const builtinConnectionId = 'costack'
 export const builtinTools = [
   {
     name: 'search_tools',
-    description: 'Search tools available through this gateway',
+    description:
+      'Discover tools from connected services. Upstream tools are not individually listed in your tool inventory. Search here before concluding a service or capability is unavailable. Use a task-specific query with the service and operation first, such as "linear list teams"; omit task filters such as "assigned to me" or "recently". Search matches whitespace-separated terms across service name, tool name, account name, or description. For longer natural-language queries with no exact match, trailing detail terms are progressively ignored. Returns qualified tool names, complete input schemas, availability, and approval requirements. Once a suitable tool and schema are returned, invoke it using call_tool without another discovery search. Reuse results for subsequent calls; search again only when a needed tool is missing or a call reports it unavailable. Omit query only when you need the full accessible catalog.',
   },
-  { name: 'call_tool', description: 'Call an allowed gateway tool' },
+  {
+    name: 'call_tool',
+    description:
+      'Execute a connected service tool discovered with search_tools. Pass its qualifiedName as name and arguments matching its inputSchema. Gateway-enforced approval is requested when required; client-managed approval uses call_tool_with_approval.',
+  },
   {
     name: 'call_tool_with_approval',
-    description: 'Call a tool after the client has obtained user approval',
+    description:
+      'Execute an approval-required tool discovered with search_tools after the client has obtained user approval for this exact call. Pass its qualifiedName as name and arguments matching its inputSchema. Use call_tool for tools that do not require approval.',
   },
 ]
 

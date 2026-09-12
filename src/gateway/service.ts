@@ -93,16 +93,13 @@ export class GatewayService {
       })
       grouped.set(key, item)
     }
-    const needle = query.trim().toLowerCase()
-    return [...grouped.values()].flatMap(({ row, policies }) => {
+    const terms = query.toLowerCase().split(/\s+/).filter(Boolean)
+    const tools = [...grouped.values()].flatMap(({ row, policies }) => {
       const policy = evaluateToolPolicy(policies, row.tool_name as string)
       if (policy === 'block') return []
       const namespace = (row.account_namespace ??
         row.connection_namespace) as string
       const qualifiedName = `${namespace}__${row.tool_name}`
-      const searchable =
-        `${qualifiedName} ${row.connection_name} ${row.account_name ?? ''} ${row.description ?? ''}`.toLowerCase()
-      if (needle && !searchable.includes(needle)) return []
       return [
         {
           qualifiedName,
@@ -128,6 +125,18 @@ export class GatewayService {
         } satisfies GatewayTool,
       ]
     })
+    if (!terms.length) return tools
+    const shortestPrefix = terms.length > 3 ? 2 : terms.length
+    for (let length = terms.length; length >= shortestPrefix; length--) {
+      const prefix = terms.slice(0, length)
+      const matches = tools.filter((tool) => {
+        const searchable =
+          `${tool.qualifiedName} ${tool.connectionName} ${tool.accountName ?? ''} ${tool.description ?? ''}`.toLowerCase()
+        return prefix.every((term) => searchable.includes(term))
+      })
+      if (matches.length) return matches
+    }
+    return []
   }
 
   async resolve(principal: GatewayPrincipal, qualifiedName: string) {

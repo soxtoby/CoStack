@@ -2,9 +2,12 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { PGlite } from '@electric-sql/pglite'
 import { PGLiteSocketServer } from '@electric-sql/pglite-socket'
 import { Pool } from 'pg'
+import { Client } from '@modelcontextprotocol/sdk/client/index.js'
+import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
 import { migrate } from '../database/migrate'
 import { GatewayError, GatewayService } from './service'
 import { builtinConnection, setBuiltinToolPolicies } from './builtin-tools'
+import { createGatewayServer } from './server'
 import type { GatewayPrincipal } from './types'
 
 const database = await PGlite.create()
@@ -109,6 +112,35 @@ afterAll(async () => {
 })
 
 describe('GatewayService', () => {
+  test('MCP discovery advertises only the principal accessible services and explains execution', async () => {
+    for (const principal of [user, { ...user, id: 'other' }]) {
+      const server = await createGatewayServer(service, principal)
+      const client = new Client({ name: 'discovery-test', version: '1' })
+      const [clientTransport, serverTransport] =
+        InMemoryTransport.createLinkedPair()
+      await server.connect(serverTransport)
+      await client.connect(clientTransport)
+      try {
+        expect(client.getInstructions()).toContain('use search_tools')
+        expect(client.getInstructions()).toContain('obtain user approval')
+        const tools = (await client.listTools()).tools
+        const search = tools.find((tool) => tool.name === 'search_tools')!
+        expect(search.description).toContain('not individually listed')
+        expect(
+          search.description!.includes(
+            'Connected services (display names): ["GitHub"]',
+          ),
+        ).toBe(principal.id === user.id)
+        expect(
+          tools.find((tool) => tool.name === 'call_tool')!.description,
+        ).toContain('qualifiedName')
+      } finally {
+        await client.close()
+        await server.close()
+      }
+    }
+  })
+
   test('search returns authorized non-blocked tools only', async () => {
     expect(
       (await service.search(user)).map((tool) => [
@@ -120,6 +152,34 @@ describe('GatewayService', () => {
       ['github__write_issue', 'require_approval'],
     ])
     expect(await service.search({ ...user, id: 'other' })).toEqual([])
+  })
+
+  test('search matches all query words across fields regardless of order or whitespace', async () => {
+    for (const query of [
+      'GitHub read issue',
+      ' ISSUE\tgithub\nREAD ',
+      'github__read_issue',
+    ]) {
+      expect(
+        (await service.search(user, query)).map((tool) => tool.qualifiedName),
+      ).toEqual(['github__read_issue'])
+    }
+    expect(await service.search(user, 'github read missing')).toEqual([])
+    expect(
+      (
+        await service.search(
+          user,
+          'github read issue assigned me recently updated',
+        )
+      ).map((tool) => tool.qualifiedName),
+    ).toEqual(['github__read_issue'])
+    expect(await service.search(user, 'github secret')).toEqual([])
+    expect(
+      await service.search({ ...user, id: 'other' }, 'github read'),
+    ).toEqual([])
+    expect(await service.search(user, ' \t\n')).toEqual(
+      await service.search(user),
+    )
   })
 
   test('routes allow and approval paths without weakening policy', async () => {

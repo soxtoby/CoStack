@@ -78,7 +78,7 @@ export async function serveMcpRequest(
   principal: GatewayPrincipal,
   clientId?: string,
 ) {
-  const server = createGatewayServer(
+  const server = await createGatewayServer(
     service,
     principal,
     clientId,
