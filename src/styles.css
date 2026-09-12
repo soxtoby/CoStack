@@ -1392,33 +1392,30 @@ fieldset {
 }
 
 /* ---------- preferences ---------- */
-.choice-grid {
+.approval-methods {
   display: grid;
-  grid-template-columns: 1fr 1fr;
   gap: 12px;
 }
-.settings-section > .note + .choice-grid {
+.settings-section > .note + .approval-methods {
   margin-top: 8px;
 }
-.choice-grid button {
-  text-align: left;
-  background: var(--surface);
-  color: inherit;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  padding: 16px;
+.approval-method {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  cursor: pointer;
 }
-.choice-grid button.chosen {
-  border-color: var(--accent);
-  box-shadow: inset 0 2px var(--accent);
+.approval-method input {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin: 3px 0 0;
+  accent-color: var(--accent);
+  cursor: pointer;
 }
-.choice-grid code {
-  font: 12px/1.5 var(--font-mono);
-  color: var(--accent-text);
-}
-.choice-grid p {
-  color: var(--text-muted);
-  margin: 8px 0 0;
+.approval-method .note {
+  display: block;
+  margin: 2px 0 0;
 }
 
 /* ---------- sign in and first run ---------- */
@@ -1694,7 +1691,6 @@ fieldset {
     flex-wrap: wrap;
     gap: 10px;
   }
-  .choice-grid,
   .tool-table > div,
   .account-cards article,
   .audit-table article,

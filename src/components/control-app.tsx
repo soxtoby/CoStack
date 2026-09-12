@@ -1260,26 +1260,32 @@ export function Preferences({ embedded = false }: { embedded?: boolean }) {
       <p className="note">
         Choose how approval-required tools ask before execution.
       </p>
-      <div className="choice-grid">
+      <fieldset className="approval-methods" aria-label="Approval method">
         {(['gateway_enforced', 'client_managed'] as const).map((method) => (
-          <button
-            className={data.approvalMethod === method ? 'chosen' : ''}
-            key={method}
-            onClick={() =>
-              controlAct('set-approval-method', { method }).then(() =>
-                setData({ ...data, approvalMethod: method }),
-              )
-            }
-          >
-            <code>{human(method)}</code>
-            <p>
-              {method === 'gateway_enforced'
-                ? 'The gateway verifies approval through MCP input_required.'
-                : 'Trust the MCP Client to prompt before it calls the marked tool.'}
-            </p>
-          </button>
+          <label className="approval-method" key={method}>
+            <input
+              type="radio"
+              name="approvalMethod"
+              value={method}
+              checked={data.approvalMethod === method}
+              aria-describedby={`${method}-description`}
+              onChange={() =>
+                controlAct('set-approval-method', { method }).then(() =>
+                  setData({ ...data, approvalMethod: method }),
+                )
+              }
+            />
+            <span>
+              <strong>{human(method)}</strong>
+              <span id={`${method}-description`} className="note">
+                {method === 'gateway_enforced'
+                  ? 'The gateway verifies approval through MCP input_required.'
+                  : 'Trust the MCP Client to prompt before it calls the marked tool.'}
+              </span>
+            </span>
+          </label>
         ))}
-      </div>
+      </fieldset>
     </>
   )
   return embedded ? content : <Page title="Approval Method">{content}</Page>
