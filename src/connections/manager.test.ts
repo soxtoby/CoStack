@@ -234,6 +234,35 @@ describe('ConnectionManager', () => {
     expect(await manager.visibleAccounts(connectionId, 'one')).toHaveLength(1)
   })
 
+  test('account creation reports namespace conflicts without exposing another account', async () => {
+    const connectionId = (
+      await pool.query(
+        "SELECT id FROM mcp_connections WHERE namespace='github'",
+      )
+    ).rows[0].id as string
+    await expect(
+      manager.addAccount({ connectionId, kind: 'shared', displayName: 'Work' }),
+    ).rejects.toThrow('choose a different account name')
+    const shared = await manager.addAccount({
+      connectionId,
+      kind: 'shared',
+      displayName: 'Team',
+    })
+    try {
+      await expect(
+        manager.addAccount({
+          connectionId,
+          kind: 'personal',
+          ownerUserId: 'one',
+          displayName: 'Team',
+        }),
+      ).rejects.toThrow('choose a different account name')
+      expect(await manager.visibleAccounts(connectionId, 'one')).toHaveLength(2)
+    } finally {
+      await pool.query('DELETE FROM mcp_accounts WHERE id=$1', [shared.id])
+    }
+  })
+
   test('discovers with Shared Accounts before Personal Accounts', async () => {
     const attempts: Array<string | undefined> = []
     const authenticated = new ConnectionManager(

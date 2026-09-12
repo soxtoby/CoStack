@@ -4,7 +4,7 @@ import { writeAudit } from './audit'
 import { builtinConnection } from './builtin-tools'
 import type { ConnectionManager } from '../connections/manager'
 import type { ToolPolicy } from '../connections/types'
-import type { GatewayPrincipal, GatewayTool } from './types'
+import type { GatewayPrincipal, GatewayTool, GatewayToolTarget } from './types'
 import type { Pool } from 'pg'
 
 export class GatewayError extends Error {
@@ -61,7 +61,7 @@ export class GatewayService {
       `SELECT c.id connection_id, c.display_name connection_name, c.namespace connection_namespace,
               t.name tool_name, t.description, t.input_schema, t.output_schema,
               h.healthy, h.error health_error,
-              a.id account_id, a.display_name account_name, a.namespace account_namespace,
+              a.id account_id, a.display_name account_name, a.namespace account_namespace, a.kind account_kind,
               p.pattern, p.effect
        FROM mcp_connections c
        JOIN connection_groups cg ON cg.connection_id=c.id
@@ -104,7 +104,14 @@ export class GatewayService {
         {
           qualifiedName,
           connectionId: row.connection_id as string,
+          connectionNamespace: row.connection_namespace as string,
           ...(row.account_id ? { accountId: row.account_id as string } : {}),
+          ...(row.account_kind
+            ? { accountKind: row.account_kind as 'personal' | 'shared' }
+            : {}),
+          ...(row.account_namespace
+            ? { accountNamespace: row.account_namespace as string }
+            : {}),
           connectionName: row.connection_name as string,
           ...(row.account_name
             ? { accountName: row.account_name as string }
@@ -139,9 +146,18 @@ export class GatewayService {
     return []
   }
 
-  async resolve(principal: GatewayPrincipal, qualifiedName: string) {
+  async resolve(
+    principal: GatewayPrincipal,
+    target: string | GatewayToolTarget,
+  ) {
     const tools = await this.search(principal)
-    const matches = tools.filter((tool) => tool.qualifiedName === qualifiedName)
+    const matches = tools.filter((tool) =>
+      typeof target === 'string'
+        ? tool.qualifiedName === target
+        : tool.connectionId === target.connectionId &&
+          tool.accountId === target.accountId &&
+          tool.toolName === target.toolName,
+    )
     if (matches.length !== 1)
       throw new GatewayError(
         'Tool is unavailable or not authorized',
@@ -152,7 +168,7 @@ export class GatewayService {
 
   async call(
     principal: GatewayPrincipal,
-    qualifiedName: string,
+    target: string | GatewayToolTarget,
     args: Record<string, unknown>,
     path: 'ordinary' | 'approved',
     clientId?: string,
@@ -161,7 +177,7 @@ export class GatewayService {
     const started = performance.now()
     let tool: GatewayTool | undefined
     try {
-      tool = await this.resolve(principal, qualifiedName)
+      tool = await this.resolve(principal, target)
       if (!tool.available)
         throw new GatewayError(
           'Upstream MCP is unavailable',

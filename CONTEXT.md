@@ -33,7 +33,7 @@ A configured upstream MCP server with transport settings, eligible Groups, Tool 
 _Avoid_: Managed MCP, integration, connector
 
 **Connection Namespace**:
-The immutable prefix for an accountless MCP Connection's tools and the basis of default Account Namespaces.
+The immutable prefix for an MCP Connection's directly exposed tools and the basis of default Account Namespaces.
 _Avoid_: Connection slug, tool prefix
 
 **Shared Account**:
@@ -45,7 +45,7 @@ A named set of MCP Connection credentials owned by one User.
 _Avoid_: Personal credentials, user login
 
 **Account Namespace**:
-The immutable prefix that distinguishes an Account's tools in the Gateway MCP. Creation derives it from the MCP Connection and Account display names; Shared namespaces are organization-wide, while Personal namespaces are unique per User.
+The immutable name used to select an Account and prefix its compatibility tool names. Shared namespaces are reserved organization-wide against both Shared and Personal Accounts; Personal namespaces are unique per User and may be reused by different Users.
 _Avoid_: Slug, tool prefix
 
 **Gateway MCP**:

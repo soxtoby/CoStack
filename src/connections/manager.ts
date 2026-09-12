@@ -191,6 +191,16 @@ export class ConnectionManager {
     )
     if (!connection.rows[0]) throw new Error('Connection not found')
     const namespace = `${connection.rows[0].namespace}_${namespaceOf(input.displayName)}`
+    // Give a useful save error; database claims also protect concurrent writes.
+    const conflict = await this.pool.query(
+      `SELECT 1 FROM mcp_accounts WHERE namespace=$1
+       AND (kind <> $2 OR kind='shared' OR owner_user_id=$3) LIMIT 1`,
+      [namespace, input.kind, input.ownerUserId ?? null],
+    )
+    if (conflict.rowCount)
+      throw new Error(
+        'Account namespace is already in use; choose a different account name',
+      )
     const envelope = input.secrets
       ? await this.vault.seal(input.secrets)
       : undefined

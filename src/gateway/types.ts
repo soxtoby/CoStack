@@ -11,7 +11,10 @@ export type GatewayPrincipal = {
 export type GatewayTool = {
   qualifiedName: string
   connectionId: string
+  connectionNamespace: string
   accountId?: string
+  accountNamespace?: string
+  accountKind?: 'personal' | 'shared'
   connectionName: string
   accountName?: string
   toolName: string
@@ -22,3 +25,8 @@ export type GatewayTool = {
   available: boolean
   healthError?: string
 }
+
+export type GatewayToolTarget = Pick<
+  GatewayTool,
+  'connectionId' | 'accountId' | 'toolName'
+>
