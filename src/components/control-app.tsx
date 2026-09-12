@@ -25,10 +25,12 @@ import {
 import { BundledMcpCards, BundledMcpSetup } from './bundled-mcps'
 import { McpIcon } from './mcp-icon'
 import { UiIcon } from './ui-icon'
+import { responseError } from './response-error'
 import type { FormEvent, ReactNode } from 'react'
 import type { BundledMcp } from '../connections/bundled-mcps'
 import type { ConnectionInput, ToolPolicy } from '../connections/types'
 import type { RegistryServer } from '../connections/registry'
+import type { AccessDeniedReason } from '../auth/access-denied'
 
 const pagePaths = {
   connections: '/connections',
@@ -53,7 +55,9 @@ type Principal = {
   oauth_client_id?: string
 }
 type Data = {
-  state: 'bootstrap' | 'login' | 'ready'
+  state: 'bootstrap' | 'login' | 'ready' | 'forbidden'
+  reason?: AccessDeniedReason
+  accessEmail?: string
   loginProviderId?: string
   me?: { name: string; email: string }
   organization?: { display_name: string }
@@ -69,7 +73,14 @@ type Data = {
     group_ids: Array<string>
   }>
   serviceAccounts?: Array<Principal>
-  providers?: Array<{ provider_id: string; domain: string; issuer: string }>
+  providers?: Array<{
+    provider_id: string
+    domain: string
+    issuer: string
+    client_id?: string
+    require_verified_email?: boolean
+  }>
+  ssoRedirectUri?: string
   capabilityOptions?: Array<string>
 }
 type View = { data: Data; reload: () => void }
@@ -83,6 +94,7 @@ export function useControlView() {
 
 export function App() {
   const [data, setData] = useState<Data>()
+  const [signOutError, setSignOutError] = useState('')
   const pathname = useLocation({ select: (location) => location.pathname })
   const page =
     Object.entries(pagePaths).find(
@@ -94,6 +106,13 @@ export function App() {
   if (!data) return <div className="loading">Checking gateway state</div>
   if (data.state === 'bootstrap') return <Bootstrap done={reload} />
   if (data.state === 'login') return <Login providerId={data.loginProviderId} />
+  if (data.state === 'forbidden')
+    return (
+      <AccessDenied
+        reason={data.reason ?? 'not-added'}
+        email={data.accessEmail}
+      />
+    )
   const manage =
     data.authorization?.administrator ||
     data.authorization?.capabilities.includes('manage_principals_groups')
@@ -143,7 +162,17 @@ export function App() {
           <button
             aria-label="Sign out"
             title="Sign out"
-            onClick={() => act('sign-out').then(() => location.reload())}
+            onClick={async () => {
+              setSignOutError('')
+              try {
+                await act('sign-out')
+                location.reload()
+              } catch (error) {
+                setSignOutError(
+                  error instanceof Error ? error.message : 'Sign out failed',
+                )
+              }
+            }}
           >
             <svg viewBox="0 0 24 24" aria-hidden="true">
               <path d="M16 17l5-5-5-5M21 12H9M10 4H5a2 2 0 00-2 2v12a2 2 0 002 2h5" />
@@ -152,6 +181,11 @@ export function App() {
         </footer>
       </aside>
       <main>
+        {signOutError && (
+          <p className="error" role="alert">
+            {signOutError}
+          </p>
+        )}
         {links.some(([id]) => id === page) ? (
           <ControlContext.Provider value={{ data, reload }}>
             <Outlet />
@@ -1730,27 +1764,86 @@ export function Sso({
   embedded = false,
 }: View & { embedded?: boolean }) {
   const p = data.providers?.[0]
+  const [saved, setSaved] = useState(false)
+  const [secret, setSecret] = useState<string | null>(null)
+  const configured = !!p || saved
   const content = (
     <>
       {embedded && <h2>Single sign-on</h2>}
       <Form
         className="sso-form"
-        submit={p ? 'Update provider' : 'Connect provider'}
+        submit={configured ? 'Save changes' : 'Save provider'}
+        submitIcon={null}
+        resetOnSuccess={false}
         go={async (f) => {
-          await act('save-sso', Object.fromEntries(f))
+          await act('save-sso', {
+            ...Object.fromEntries(f),
+            clientSecret: secret ?? '',
+            requireVerifiedEmail: f.has('requireVerifiedEmail'),
+          })
+          setSecret(null)
+          setSaved(true)
           reload()
         }}
       >
-        <div className="form-grid">
+        <p role="status">
+          {saved ? 'Changes saved. ' : ''}
+          {configured
+            ? 'Provider configured in CoStack.'
+            : 'No SSO provider configured yet.'}
+        </p>
+        <div className="form-grid" onChange={() => setSaved(false)}>
           <Field label="Issuer URL">
             <input name="issuer" type="url" required defaultValue={p?.issuer} />
           </Field>
           <Field label="Client ID">
-            <input name="clientId" required />
+            <input name="clientId" required defaultValue={p?.client_id} />
           </Field>
           <Field label="Client secret">
-            <input name="clientSecret" type="password" required />
+            <input
+              name="clientSecret"
+              type="password"
+              required={!configured}
+              value={secret ?? (configured ? '********' : '')}
+              onChange={(e) => setSecret(e.target.value)}
+              onFocus={(e) => {
+                if (secret === null) e.target.select()
+              }}
+              autoComplete="new-password"
+            />
+            {configured && (
+              <small>Enter a new secret to replace the stored value.</small>
+            )}
           </Field>
+          <div className="field">
+            <label className="toggle">
+              <input
+                type="checkbox"
+                name="requireVerifiedEmail"
+                defaultChecked={p?.require_verified_email ?? true}
+              />{' '}
+              Require verified email
+            </label>
+            <small>
+              When disabled, CoStack trusts the configured provider’s email for
+              matching admin-added Users, even if the provider does not mark it
+              verified.
+            </small>
+          </div>
+          {data.ssoRedirectUri && (
+            <Field label="Redirect URI">
+              <input
+                readOnly
+                value={data.ssoRedirectUri}
+                onFocus={(e) => e.target.select()}
+              />
+              <small>
+                Register this exact URI in your identity provider before signing
+                in. Saving here does not configure or verify the identity
+                provider.
+              </small>
+            </Field>
+          )}
         </div>
       </Form>
     </>
@@ -1820,6 +1913,70 @@ function Bootstrap({ done }: { done: () => void }) {
     </div>
   )
 }
+export function AccessDenied({
+  reason,
+  email,
+}: {
+  reason: AccessDeniedReason
+  email?: string | undefined
+}) {
+  const [error, setError] = useState('')
+  const [signingOut, setSigningOut] = useState(false)
+  return (
+    <div className="entry">
+      <EntryArt
+        code="ACCESS / CONTROL"
+        title="Access needs attention."
+        text="Contact your Organization’s administrator to complete sign-in setup."
+      />
+      <div className="login">
+        <Logo />
+        <h2>
+          {reason === 'email-unverified'
+            ? 'Email verification required'
+            : 'Access required'}
+        </h2>
+        {email && (
+          <p>
+            Email: <strong>{email}</strong>
+          </p>
+        )}
+        <p>
+          {reason === 'email-unverified'
+            ? 'Your identity provider did not confirm that your email is verified. Ask your administrator to check the SSO configuration. Adding your email as a User alone will not resolve this.'
+            : reason === 'disabled'
+              ? 'Your access has been disabled. Ask your administrator to restore it.'
+              : 'An administrator needs to add your SSO email as a User before you can access CoStack. Once added, sign in again.'}
+        </p>
+        <button
+          className="primary"
+          disabled={signingOut}
+          onClick={async () => {
+            setError('')
+            setSigningOut(true)
+            try {
+              await act('sign-out')
+              location.replace('/connections')
+            } catch (failure) {
+              setError(
+                failure instanceof Error ? failure.message : 'Sign out failed',
+              )
+              setSigningOut(false)
+            }
+          }}
+        >
+          {signingOut ? 'Signing out…' : 'Sign out and return to sign in'}
+        </button>
+        {error && (
+          <p className="error" role="alert">
+            {error}
+          </p>
+        )}
+      </div>
+    </div>
+  )
+}
+
 function Login({ providerId }: { providerId: string | undefined }) {
   const [error, setError] = useState('')
   return (
@@ -2006,6 +2163,7 @@ function Form(p: {
   go: (f: FormData) => Promise<void>
   submit: string
   submitIcon?: ReactNode
+  resetOnSuccess?: boolean
   title?: string
   compact?: boolean
   cancel?: () => void
@@ -2025,7 +2183,7 @@ function Form(p: {
         setError('')
         try {
           await p.go(new FormData(form))
-          form.reset()
+          if (p.resetOnSuccess !== false) form.reset()
         } catch (x) {
           setError(x instanceof Error ? x.message : 'Request failed')
         } finally {
@@ -2068,9 +2226,11 @@ function Form(p: {
           )}
           <button className="primary" disabled={submitting || p.disabled}>
             {submitting ? 'Saving…' : p.submit}
-            <b className="button-icon">
-              {p.submitIcon ?? <UiIcon name="arrowRight" />}
-            </b>
+            {p.submitIcon !== null && (
+              <b className="button-icon">
+                {p.submitIcon ?? <UiIcon name="arrowRight" />}
+              </b>
+            )}
           </button>
           {error && <p className="error">{error}</p>}
         </>
@@ -2126,9 +2286,8 @@ async function act(action: string, body: Record<string, unknown> = {}) {
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ action, ...body }),
   })
-  const d = await r.json().catch(() => ({}))
-  if (!r.ok) throw Error(d.error ?? 'Request failed')
-  return d
+  if (!r.ok) throw await responseError(r)
+  return r.json().catch(() => ({}))
 }
 function human(x: string) {
   return x.replaceAll('_', ' ').replace(/^./, (c) => c.toUpperCase())

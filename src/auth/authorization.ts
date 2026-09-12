@@ -1,3 +1,4 @@
+import { SsoAccessDenied } from './access-denied'
 import type { Pool, PoolClient } from 'pg'
 
 export const capabilities = [
@@ -77,8 +78,10 @@ export async function claimPreProvisionedAccess(
     subject?: string
   },
   pool: Pool,
+  policy: { requireVerifiedEmail: boolean } = { requireVerifiedEmail: true },
 ) {
-  if (!user.emailVerified) throw new Error('SSO email must be verified')
+  if (policy.requireVerifiedEmail && !user.emailVerified)
+    throw new SsoAccessDenied('email-unverified')
   const client = await pool.connect()
   try {
     await client.query('BEGIN')
@@ -95,6 +98,16 @@ export async function claimPreProvisionedAccess(
       [user.id],
     )
     const identity = existing.rows[0]
+    if (!identity) {
+      const prepared = await client.query(
+        `SELECT id FROM pre_provisioned_access
+         WHERE organization_id = $1 AND normalized_email = lower(trim($2))
+           AND claimed_at IS NULL AND revoked_at IS NULL AND expires_at > now()
+         FOR UPDATE`,
+        [organizationId, user.email],
+      )
+      if (!prepared.rows[0]) throw new SsoAccessDenied('not-added')
+    }
     if (
       identity &&
       ((identity.oidc_issuer && identity.oidc_issuer !== user.issuer) ||

@@ -3,38 +3,28 @@ import { mcp } from '@better-auth/mcp'
 import { sso } from '@better-auth/sso'
 import { jwt } from 'better-auth/plugins'
 import { databasePool } from '../database/pool'
-import { claimPreProvisionedAccess } from './authorization'
+import { ssoProvisioning } from './sso-provisioning'
+import { SsoConfiguration } from './sso'
 import type { BetterAuthPlugin } from 'better-auth'
 
 const applicationUrl = process.env.APPLICATION_URL ?? 'http://localhost:3000'
 const production = process.env.NODE_ENV === 'production'
+export const ssoConfiguration = new SsoConfiguration(
+  databasePool(),
+  applicationUrl,
+)
 
 export const auth = betterAuth({
   appName: 'CoStack',
   baseURL: applicationUrl,
+  trustedOrigins: ssoConfiguration.trustedOrigins,
   secret: process.env.BETTER_AUTH_SECRET,
   database: databasePool(),
   advanced: { database: { joins: true } },
   emailAndPassword: { enabled: true },
   plugins: [
     jwt(),
-    sso({
-      async provisionUser({ user, userInfo, provider }) {
-        await claimPreProvisionedAccess(
-          {
-            id: user.id,
-            name: user.name,
-            email: user.email,
-            emailVerified: user.emailVerified,
-            issuer: provider.issuer,
-            ...(typeof userInfo.sub === 'string'
-              ? { subject: userInfo.sub }
-              : {}),
-          },
-          databasePool(),
-        )
-      },
-    }),
+    sso(ssoProvisioning(databasePool(), applicationUrl)),
     mcp({
       resource: `${applicationUrl}/mcp`,
       loginPage: '/login',

@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto'
 import { databasePool } from '../database/pool'
 import { grantAccess } from './access'
-import { auth } from './auth'
+import { auth, ssoConfiguration } from './auth'
 import {
   assertAdministratorChange,
   capabilities,
@@ -33,10 +33,12 @@ export async function adminHandler(request: Request) {
     const body = (await request.json()) as Record<string, unknown>
     const action = String(body.action ?? '')
     if (action === 'sign-out')
-      return auth.api.signOut({
+      return await auth.api.signOut({
         headers: request.headers,
-      }) as unknown as Response
-    if (action === 'save-sso') return saveSso(request, body)
+        asResponse: true,
+      })
+    if (action === 'save-sso')
+      return await ssoConfiguration.save(request, body, auth)
     await requireCapability(request, 'manage_principals_groups')
     if (action === 'create-group') return createGroup(body)
     if (action === 'create-access') return createAccess(body)
@@ -74,7 +76,14 @@ async function snapshot(request: Request) {
   }
   const authorization = await loadAuthorization(current.user.id, pool)
   if (!authorization || authorization.disabled)
-    return Response.json({ state: 'forbidden' }, { status: 403 })
+    return Response.json(
+      {
+        state: 'forbidden',
+        accessEmail: current.user.email,
+        reason: authorization?.disabled ? 'disabled' : 'not-added',
+      },
+      { status: 403 },
+    )
   const canManage = may(authorization, 'manage_principals_groups')
   const [organization, users, groups, access, services, providers] =
     await Promise.all([
@@ -106,7 +115,9 @@ async function snapshot(request: Request) {
         : Promise.resolve({ rows: [] }),
       may(authorization, 'manage_sso')
         ? pool.query(
-            'SELECT "providerId" AS provider_id, domain, issuer FROM "ssoProvider"',
+            `SELECT "providerId" AS provider_id, domain, issuer,
+              "oidcConfig"::jsonb->>'clientId' AS client_id,
+              "requireVerifiedEmail" AS require_verified_email FROM "ssoProvider"`,
           )
         : Promise.resolve({ rows: [] }),
     ])
@@ -123,6 +134,9 @@ async function snapshot(request: Request) {
     access: access.rows,
     serviceAccounts: services.rows,
     providers: providers.rows,
+    ssoRedirectUri: may(authorization, 'manage_sso')
+      ? ssoConfiguration.redirectUri(providers.rows[0]?.provider_id)
+      : undefined,
     capabilityOptions: capabilities,
   })
 }
@@ -309,48 +323,6 @@ async function createServiceAccount(body: Record<string, unknown>) {
     ok: true,
     credential: { clientId, clientSecret: secret },
   })
-}
-
-async function saveSso(request: Request, body: Record<string, unknown>) {
-  await requireCapability(request, 'manage_sso')
-  const issuer = String(body.issuer ?? '').trim()
-  if (!issuer) throw new Error('Issuer URL is required')
-  const pool = databasePool()
-  const existing = await pool.query<{ providerId: string; domain: string }>(
-    'SELECT "providerId", domain FROM "ssoProvider" LIMIT 1',
-  )
-  const path = existing.rows[0]
-    ? '/api/auth/sso/update-provider'
-    : '/api/auth/sso/register'
-  const payload = existing.rows[0]
-    ? {
-        providerId: existing.rows[0].providerId,
-        issuer,
-        domain: existing.rows[0].domain,
-        oidcConfig: {
-          clientId: String(body.clientId),
-          clientSecret: String(body.clientSecret),
-          issuer,
-        },
-      }
-    : {
-        providerId: 'organization',
-        issuer,
-        // Better Auth requires a domain for multi-provider email routing. CoStack
-        // has one explicitly selected provider, so reserve a non-matching value.
-        domain: 'organization.invalid',
-        oidcConfig: {
-          clientId: String(body.clientId),
-          clientSecret: String(body.clientSecret),
-          issuer,
-        },
-      }
-  const upstream = new Request(new URL(path, request.url), {
-    method: 'POST',
-    headers: request.headers,
-    body: JSON.stringify(payload),
-  })
-  return auth.handler(upstream)
 }
 
 function stringArray(value: unknown) {

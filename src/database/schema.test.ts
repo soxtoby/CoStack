@@ -41,6 +41,7 @@ describe('database schema', () => {
       { name: '0005_upstream_oauth.sql' },
       { name: '0006_gateway.sql' },
       { name: '0007_builtin_tools.sql' },
+      { name: '0008_sso_email_verification.sql' },
     ])
   })
 

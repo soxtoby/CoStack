@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AppRouteImport } from './routes/_app'
+import { Route as AccessDeniedRouteImport } from './routes/access-denied'
 import { Route as HealthRouteImport } from './routes/health'
 import { Route as McpRouteImport } from './routes/mcp'
 import { Route as AppAuditRouteImport } from './routes/_app.audit'
@@ -39,6 +40,11 @@ const IndexRoute = IndexRouteImport.update({
 } as any)
 const AppRoute = AppRouteImport.update({
   id: '/_app',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AccessDeniedRoute = AccessDeniedRouteImport.update({
+  id: '/access-denied',
+  path: '/access-denied',
   getParentRoute: () => rootRouteImport,
 } as any)
 const HealthRoute = HealthRouteImport.update({
@@ -146,6 +152,7 @@ const AppConnectionsConnectionIdConfigureRoute =
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/access-denied': typeof AccessDeniedRoute
   '/health': typeof HealthRoute
   '/mcp': typeof McpRoute
   '/audit': typeof AppAuditRoute
@@ -169,6 +176,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/access-denied': typeof AccessDeniedRoute
   '/health': typeof HealthRoute
   '/mcp': typeof McpRoute
   '/audit': typeof AppAuditRoute
@@ -194,6 +202,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/_app': typeof AppRouteWithChildren
+  '/access-denied': typeof AccessDeniedRoute
   '/health': typeof HealthRoute
   '/mcp': typeof McpRoute
   '/_app/audit': typeof AppAuditRoute
@@ -219,6 +228,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/access-denied'
     | '/health'
     | '/mcp'
     | '/audit'
@@ -242,6 +252,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/access-denied'
     | '/health'
     | '/mcp'
     | '/audit'
@@ -266,6 +277,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/_app'
+    | '/access-denied'
     | '/health'
     | '/mcp'
     | '/_app/audit'
@@ -291,6 +303,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AppRoute: typeof AppRouteWithChildren
+  AccessDeniedRoute: typeof AccessDeniedRoute
   HealthRoute: typeof HealthRoute
   McpRoute: typeof McpRoute
   ApiAdminRoute: typeof ApiAdminRoute
@@ -316,6 +329,13 @@ declare module '@tanstack/react-router' {
       path: ''
       fullPath: '/'
       preLoaderRoute: typeof AppRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/access-denied': {
+      id: '/access-denied'
+      path: '/access-denied'
+      fullPath: '/access-denied'
+      preLoaderRoute: typeof AccessDeniedRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/health': {
@@ -495,6 +515,7 @@ const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AppRoute: AppRouteWithChildren,
+  AccessDeniedRoute: AccessDeniedRoute,
   HealthRoute: HealthRoute,
   McpRoute: McpRoute,
   ApiAdminRoute: ApiAdminRoute,
