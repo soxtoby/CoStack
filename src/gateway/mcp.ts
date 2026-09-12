@@ -1,14 +1,12 @@
 import { requireMcpAuth } from '@better-auth/mcp'
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js'
-import { z } from 'zod/v4'
 import { auth } from '../auth/auth'
 import { ConnectionManager } from '../connections/manager'
 import { SecretVault } from '../connections/secrets'
 import { databasePool } from '../database/pool'
-import { GatewayError, GatewayService } from './service'
-import type { GatewayPrincipal, GatewayTool } from './types'
-import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
+import { GatewayService } from './service'
+import { createGatewayServer } from './server'
+import type { GatewayPrincipal } from './types'
 import type { JWTPayload } from 'jose'
 
 const applicationUrl = new URL(
@@ -80,7 +78,12 @@ export async function serveMcpRequest(
   principal: GatewayPrincipal,
   clientId?: string,
 ) {
-  const server = createGatewayServer(service, principal, clientId)
+  const server = createGatewayServer(
+    service,
+    principal,
+    clientId,
+    await service.builtinToolPolicies(),
+  )
   const transport = new WebStandardStreamableHTTPServerTransport({
     enableJsonResponse: true,
   })
@@ -88,154 +91,11 @@ export async function serveMcpRequest(
   return transport.handleRequest(request)
 }
 
-export function createGatewayServer(
-  service: GatewayService,
-  principal: GatewayPrincipal,
-  clientId?: string,
-) {
-  const server = new McpServer({ name: 'costack', version: '0.1.0' })
-  server.registerTool(
-    'search_tools',
-    {
-      description: 'Search tools available through this gateway',
-      inputSchema: { query: z.string().optional().default('') },
-    },
-    async ({ query }) => textResult(await service.search(principal, query)),
-  )
-  const callSchema = {
-    name: z.string(),
-    arguments: z.record(z.string(), z.unknown()).optional().default({}),
-  }
-  server.registerTool(
-    'call_tool',
-    {
-      description: 'Call an allowed gateway tool',
-      inputSchema: callSchema,
-    },
-    async ({ name, arguments: args }, extra) => {
-      const tool = await service.resolve(principal, name)
-      if (
-        tool.policy === 'require_approval' &&
-        principal.approvalMethod === 'gateway_enforced'
-      )
-        return gatewayApprovedCall(
-          server,
-          service,
-          principal,
-          tool,
-          args,
-          clientId,
-          extra.signal,
-        )
-      return resultOf(
-        await service.call(
-          principal,
-          name,
-          args,
-          'ordinary',
-          clientId,
-          extra.signal,
-        ),
-      )
-    },
-  )
-  server.registerTool(
-    'call_tool_with_approval',
-    {
-      description: 'Call a tool after the client has obtained user approval',
-      inputSchema: callSchema,
-      annotations: {
-        title: 'Call tool with approval',
-        destructiveHint: true,
-        openWorldHint: true,
-      },
-    },
-    async ({ name, arguments: args }, extra) =>
-      resultOf(
-        await service.call(
-          principal,
-          name,
-          args,
-          'approved',
-          clientId,
-          extra.signal,
-        ),
-      ),
-  )
-  return server
-}
-
-async function gatewayApprovedCall(
-  server: McpServer,
-  service: GatewayService,
-  principal: GatewayPrincipal,
-  tool: GatewayTool,
-  args: Record<string, unknown>,
-  clientId: string | undefined,
-  signal: AbortSignal,
-) {
-  if (!server.server.getClientCapabilities()?.elicitation)
-    throw new GatewayError(
-      'This client does not support gateway-enforced approval',
-      'approval_unsupported',
-    )
-  const approval = await service.createApproval(principal, tool, args)
-  const response = await server.server.elicitInput(
-    {
-      mode: 'form',
-      message: `Approve ${tool.qualifiedName}? The gateway never stores tool arguments.`,
-      requestedSchema: {
-        type: 'object',
-        properties: {
-          approve: {
-            type: 'boolean',
-            title: 'Approve this call',
-            default: false,
-          },
-        },
-        required: ['approve'],
-      },
-    },
-    { signal },
-  )
-  if (response.action !== 'accept' || response.content?.approve !== true)
-    throw new GatewayError('User declined approval', 'approval_declined')
-  await service.consumeApproval(
-    principal,
-    approval.id,
-    approval.nonce,
-    tool,
-    args,
-  )
-  return resultOf(
-    await service.call(
-      principal,
-      tool.qualifiedName,
-      args,
-      'approved',
-      clientId,
-      signal,
-    ),
-  )
-}
-
 function tokenClientId(claims: JWTPayload) {
   const value = claims.client_id ?? claims.azp
   return typeof value === 'string' ? value : undefined
 }
 
-function textResult(value: unknown): CallToolResult {
-  return { content: [{ type: 'text', text: JSON.stringify(value) }] }
-}
-function resultOf(value: unknown): CallToolResult {
-  if (
-    value &&
-    typeof value === 'object' &&
-    Array.isArray((value as CallToolResult).content)
-  )
-    return value as CallToolResult
-  return textResult(value)
-}
 function jsonRpcError(status: number, message: string) {
   return Response.json(
     { jsonrpc: '2.0', error: { code: -32000, message }, id: null },

@@ -174,6 +174,7 @@ type ControlData = {
     healthy: boolean | null
     error: string | null
     account_count: number
+    builtin?: boolean
     icon?: string
     group_ids: Array<string>
   }>
@@ -186,6 +187,7 @@ type ControlData = {
   auditRetentionDays: number
   audit: Array<Record<string, string | number | null>>
   detail?: {
+    builtin?: boolean
     id: string
     display_name: string
     namespace: string
@@ -304,13 +306,15 @@ export function ConnectionSummary(p: {
       <McpIcon src={c.icon} name={c.display_name} />
       <span className="connection-identity">
         <b>{c.display_name}</b>
-        <code>{c.namespace}__*</code>
+        {c.builtin ? <small>Gateway MCP</small> : <code>{c.namespace}__*</code>}
       </span>
       <Status ok={c.state === 'enabled'}>
         {c.state === 'enabled' ? 'Available' : 'Not available'}
       </Status>
       <span className="account-count">
-        {c.account_count} {c.account_count === 1 ? 'Account' : 'Accounts'}
+        {c.builtin
+          ? 'Built in'
+          : `${c.account_count} ${c.account_count === 1 ? 'Account' : 'Accounts'}`}
       </span>
     </button>
   )
@@ -486,6 +490,20 @@ function ConnectionDetail(p: {
   const [credentials, setCredentials] = useState<string>()
   const [addingAccount, setAddingAccount] = useState(false)
   const [refreshError, setRefreshError] = useState('')
+  if (d.builtin)
+    return (
+      <header className="detail-head">
+        <h3>Tools</h3>
+        <Link
+          className="secondary"
+          to="/connections/$connectionId/configure"
+          params={{ connectionId: d.id }}
+          search={{ tab: 'tools' }}
+        >
+          Configure Tools
+        </Link>
+      </header>
+    )
   return (
     <>
       <header className="detail-head">
@@ -669,59 +687,71 @@ function EditConnectionForm(p: {
           p.done()
         }}
       >
-        <div
-          className="configuration-fields"
-          hidden={p.tab !== 'connection'}
-          onChange={() => {
-            setSettingsChanged(true)
-            p.changed()
-          }}
-        >
-          <Field label="Display name">
-            <input name="displayName" defaultValue={d.display_name} required />
-          </Field>
-          {http ? (
-            <Field label="HTTPS URL">
+        {!d.builtin && (
+          <div
+            className="configuration-fields"
+            hidden={p.tab !== 'connection'}
+            onChange={() => {
+              setSettingsChanged(true)
+              p.changed()
+            }}
+          >
+            <Field label="Display name">
               <input
-                name="url"
-                type="url"
-                defaultValue={String(transport.url ?? '')}
+                name="displayName"
+                defaultValue={d.display_name}
                 required
               />
             </Field>
-          ) : (
-            <>
-              <Field label="Command">
+            {http ? (
+              <Field label="HTTPS URL">
                 <input
-                  name="command"
-                  defaultValue={String(transport.command ?? '')}
+                  name="url"
+                  type="url"
+                  defaultValue={String(transport.url ?? '')}
                   required
                 />
               </Field>
-              <Field label="Arguments">
-                <input
-                  name="args"
-                  defaultValue={
-                    Array.isArray(transport.args)
-                      ? transport.args.join(' ')
-                      : ''
-                  }
-                />
-              </Field>
-            </>
-          )}
-          <GroupChecks
-            groups={p.groups}
-            selected={d.group_ids ?? []}
-            label="Group access"
-          />
-          <p>
-            Members of these Groups can create Personal Accounts and use this
-            connection. Choose a Group you belong to before signing in
-            personally.
-          </p>
-        </div>
+            ) : (
+              <>
+                <Field label="Command">
+                  <input
+                    name="command"
+                    defaultValue={String(transport.command ?? '')}
+                    required
+                  />
+                </Field>
+                <Field label="Arguments">
+                  <input
+                    name="args"
+                    defaultValue={
+                      Array.isArray(transport.args)
+                        ? transport.args.join(' ')
+                        : ''
+                    }
+                  />
+                </Field>
+              </>
+            )}
+            <GroupChecks
+              groups={p.groups}
+              selected={d.group_ids ?? []}
+              label="Group access"
+            />
+            <p>
+              Members of these Groups can create Personal Accounts and use this
+              connection. Choose a Group you belong to before signing in
+              personally.
+            </p>
+          </div>
+        )}
         <div hidden={p.tab !== 'tools'}>
+          {d.builtin && (
+            <p>
+              These policies apply to everyone using the Gateway MCP. Require
+              approval needs a client that supports gateway approval prompts.
+            </p>
+          )}
           <ToolPolicyEditor
             policies={policies}
             tools={d.tools}
@@ -2120,6 +2150,7 @@ export function ConfigureConnectionPage({
   if (!control) return <p role="status">Loading connection…</p>
   const d = control.detail
   if (!d) return <p role="alert">Connection not found.</p>
+  if (d.builtin) tab = 'tools'
   const run = async (action: string, extra: Record<string, unknown> = {}) => {
     setBusy(true)
     setActionError('')
@@ -2147,20 +2178,22 @@ export function ConfigureConnectionPage({
               to="/connections"
               search={{ connection: connectionId }}
             >
-              ← Back to Accounts
+              ← Back to {d.builtin ? 'Connections' : 'Accounts'}
             </Link>
           </>
         }
       />
       <div className="config-tabs" aria-label="Configuration sections">
-        <Link
-          to="/connections/$connectionId/configure"
-          params={{ connectionId }}
-          search={{ tab: 'connection' }}
-          aria-current={tab === 'connection' ? 'page' : undefined}
-        >
-          Connection config
-        </Link>
+        {!d.builtin && (
+          <Link
+            to="/connections/$connectionId/configure"
+            params={{ connectionId }}
+            search={{ tab: 'connection' }}
+            aria-current={tab === 'connection' ? 'page' : undefined}
+          >
+            Connection config
+          </Link>
+        )}
         <Link
           to="/connections/$connectionId/configure"
           params={{ connectionId }}
@@ -2175,25 +2208,26 @@ export function ConfigureConnectionPage({
           <span>
             {saved ? 'Changes saved.' : 'Save changes to apply your edits.'}
           </span>
-          {tab === 'tools' ? (
-            <button
-              className="secondary"
-              disabled={busy || dirty}
-              onClick={() => void run('refresh-connection')}
-            >
-              {busy ? 'Refreshing…' : 'Refresh tools'}
-            </button>
-          ) : (
-            <button
-              className="secondary"
-              disabled={busy || dirty}
-              onClick={() =>
-                void run('set-enabled', { enabled: d.state !== 'enabled' })
-              }
-            >
-              {d.state === 'enabled' ? 'Pause access' : 'Make available'}
-            </button>
-          )}
+          {!d.builtin &&
+            (tab === 'tools' ? (
+              <button
+                className="secondary"
+                disabled={busy || dirty}
+                onClick={() => void run('refresh-connection')}
+              >
+                {busy ? 'Refreshing…' : 'Refresh tools'}
+              </button>
+            ) : (
+              <button
+                className="secondary"
+                disabled={busy || dirty}
+                onClick={() =>
+                  void run('set-enabled', { enabled: d.state !== 'enabled' })
+                }
+              >
+                {d.state === 'enabled' ? 'Pause access' : 'Make available'}
+              </button>
+            ))}
         </div>
         {actionError && (
           <p className="error" role="alert">

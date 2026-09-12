@@ -1,4 +1,9 @@
 import { databasePool } from '../database/pool'
+import {
+  builtinConnection,
+  builtinConnectionId,
+  setBuiltinToolPolicies,
+} from '../gateway/builtin-tools'
 import { auth } from '../auth/auth'
 import { loadAuthorization, may } from '../auth/authorization'
 import { ConnectionManager, RevisionConflictError } from './manager'
@@ -59,6 +64,10 @@ export async function controlHandler(request: Request) {
     if (request.method === 'GET') return snapshot(request, url)
     const body = (await request.json()) as Record<string, unknown>
     const action = String(body.action ?? '')
+    if (body.connectionId === builtinConnectionId)
+      throw new Error(
+        'CoStack does not support Accounts or upstream configuration',
+      )
     if (action === 'set-approval-method')
       return setApprovalMethod(request, body)
     if (action === 'create-personal-account')
@@ -146,15 +155,19 @@ async function snapshot(request: Request, url: URL) {
     canAudit ? auditRows(pool, url) : Promise.resolve({ rows: [] }),
   ])
   const detailId = url.searchParams.get('connection')
-  const detail = detailId
-    ? await connectionDetail(
-        pool,
-        detailId,
-        actor.current.user.id,
-        canConnections || canAccounts,
-        canAccounts,
-      )
-    : undefined
+  const builtin = canConnections ? await builtinConnection(pool) : undefined
+  const detail =
+    detailId === builtinConnectionId
+      ? builtin
+      : detailId
+        ? await connectionDetail(
+            pool,
+            detailId,
+            actor.current.user.id,
+            canConnections || canAccounts,
+            canAccounts,
+          )
+        : undefined
   return Response.json({
     authorization: {
       administrator: actor.authorization.administrator,
@@ -167,14 +180,15 @@ async function snapshot(request: Request, url: URL) {
       )
     ).rows[0]?.approval_method,
     organizationId,
-    connections: connections.rows.map(
-      ({ transport_config, ...connection }) => ({
+    connections: [
+      ...(builtin ? [builtin] : []),
+      ...connections.rows.map(({ transport_config, ...connection }) => ({
         ...connection,
         icon: findBundledMcp(
           scrubTransport(transport_config as TransportConfig),
         )?.icon,
-      }),
-    ),
+      })),
+    ],
     registrySources: sources.rows,
     auditRetentionDays: settings.rows[0]?.audit_retention_days ?? 90,
     audit: audit.rows,
@@ -263,6 +277,17 @@ async function connectionAction(
   action: string,
   userId: string,
 ) {
+  if (body.id === builtinConnectionId) {
+    if (action !== 'set-tool-policies')
+      throw new Error('Only Tools can be configured for CoStack')
+    return Response.json(
+      await setBuiltinToolPolicies(
+        databasePool(),
+        Number(body.revision),
+        body.policies as Array<ToolPolicy>,
+      ),
+    )
+  }
   const service = await manager()
   if (action === 'set-tool-policies')
     return Response.json(

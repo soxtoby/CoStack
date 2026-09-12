@@ -4,6 +4,7 @@ import { PGLiteSocketServer } from '@electric-sql/pglite-socket'
 import { Pool } from 'pg'
 import { migrate } from '../database/migrate'
 import { GatewayError, GatewayService } from './service'
+import { builtinConnection, setBuiltinToolPolicies } from './builtin-tools'
 import type { GatewayPrincipal } from './types'
 
 const database = await PGlite.create()
@@ -71,6 +72,33 @@ beforeAll(async () => {
   await pool.query(
     "INSERT INTO connection_health(connection_id,healthy) VALUES ('c',true)",
   )
+})
+
+test('built-in tool policies persist and reject stale or invalid edits', async () => {
+  const initial = await builtinConnection(pool)
+  expect(initial.tools.map((tool) => tool.name)).toEqual([
+    'search_tools',
+    'call_tool',
+    'call_tool_with_approval',
+  ])
+  expect(initial.tools.every((tool) => tool.policy === 'allow')).toBe(true)
+  const policies = [
+    { pattern: '*', effect: 'allow' },
+    { pattern: 'call_*', effect: 'block' },
+  ] as const
+  await setBuiltinToolPolicies(pool, initial.revision, [...policies])
+  expect(
+    (await builtinConnection(pool)).tools.map((tool) => tool.policy),
+  ).toEqual(['allow', 'block', 'block'])
+  await expect(
+    setBuiltinToolPolicies(pool, initial.revision, []),
+  ).rejects.toThrow('reload and retry')
+  await expect(
+    setBuiltinToolPolicies(pool, initial.revision + 1, [
+      { pattern: '[bad]', effect: 'allow' },
+    ]),
+  ).rejects.toThrow('Unsupported')
+  await setBuiltinToolPolicies(pool, initial.revision + 1, initial.policies)
 })
 
 afterAll(async () => {

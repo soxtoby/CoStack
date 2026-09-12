@@ -40,6 +40,7 @@ describe('database schema', () => {
       { name: '0004_connection_runtime.sql' },
       { name: '0005_upstream_oauth.sql' },
       { name: '0006_gateway.sql' },
+      { name: '0007_builtin_tools.sql' },
     ])
   })
 

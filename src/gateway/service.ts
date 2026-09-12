@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { evaluateToolPolicy } from '../connections/policy'
 import { writeAudit } from './audit'
+import { builtinConnection } from './builtin-tools'
 import type { ConnectionManager } from '../connections/manager'
 import type { ToolPolicy } from '../connections/types'
 import type { GatewayPrincipal, GatewayTool } from './types'
@@ -16,6 +17,9 @@ export class GatewayError extends Error {
 }
 
 export class GatewayService {
+  async builtinToolPolicies() {
+    return (await builtinConnection(this.pool)).policies
+  }
   constructor(
     private pool: Pool,
     private connections: ConnectionManager,
