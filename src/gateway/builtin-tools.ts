@@ -1,4 +1,4 @@
-import { evaluateToolPolicy, validateGlob } from '../connections/policy'
+import { evaluateToolPolicy, validateToolPolicy } from '../connections/policy'
 import { RevisionConflictError } from '../connections/manager'
 import type { ToolPolicy } from '../connections/types'
 import type { Pool } from 'pg'
@@ -7,16 +7,35 @@ export const builtinConnectionId = 'costack'
 export const builtinTools = [
   {
     name: 'search_tools',
+    annotations: {
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
     description:
       'Discover tools from connected services. Prefer directly exposed connection tools. This compatibility search returns account-qualified tools when a needed operation is missing from your inventory. Use a task-specific query with the service and operation first, such as "linear list teams"; omit task filters such as "assigned to me" or "recently". Search matches whitespace-separated terms across service name, tool name, account name, or description. For longer natural-language queries with no exact match, trailing detail terms are progressively ignored. Returns qualified tool names, complete input schemas, availability, and approval requirements. Once a suitable tool and schema are returned, invoke it using call_tool without another discovery search. Reuse results for subsequent calls; search again only when a needed tool is missing or a call reports it unavailable. Omit query only when you need the full accessible catalog.',
   },
   {
     name: 'call_tool',
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: false,
+      openWorldHint: true,
+    },
     description:
       'Execute a connected service tool discovered with search_tools. Pass its qualifiedName as name and arguments matching its inputSchema. Gateway-enforced approval is requested when required; client-managed approval uses call_tool_with_approval.',
   },
   {
     name: 'call_tool_with_approval',
+    annotations: {
+      title: 'Call tool with approval',
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: false,
+      openWorldHint: true,
+    },
     description:
       'Execute an approval-required tool discovered with search_tools after the client has obtained user approval for this exact call. Pass its qualifiedName as name and arguments matching its inputSchema. Use call_tool for tools that do not require approval.',
   },
@@ -46,7 +65,7 @@ export async function builtinConnection(pool: Pool) {
     policies,
     tools: builtinTools.map((tool) => ({
       ...tool,
-      policy: evaluateToolPolicy(policies, tool.name),
+      policy: evaluateBuiltinToolPolicy(policies, tool.name),
     })),
   }
 }
@@ -56,11 +75,7 @@ export async function setBuiltinToolPolicies(
   revision: number,
   policies: Array<ToolPolicy>,
 ) {
-  for (const policy of policies) {
-    validateGlob(policy.pattern)
-    if (!['allow', 'block', 'require_approval'].includes(policy.effect))
-      throw new Error('Invalid policy action')
-  }
+  policies.forEach(validateToolPolicy)
   const result = await pool.query(
     'UPDATE gateway_settings SET tool_policies=$1,tool_policy_revision=tool_policy_revision+1 WHERE singleton AND tool_policy_revision=$2',
     [JSON.stringify(policies), revision],
@@ -68,4 +83,15 @@ export async function setBuiltinToolPolicies(
   if (result.rowCount !== 1)
     throw new RevisionConflictError('Connection changed; reload and retry')
   return { revision: revision + 1 }
+}
+
+export function evaluateBuiltinToolPolicy(
+  policies: Array<ToolPolicy>,
+  name: string,
+) {
+  return evaluateToolPolicy(
+    policies,
+    name,
+    builtinTools.find((tool) => tool.name === name)?.annotations,
+  )
 }

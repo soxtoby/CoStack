@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { deriveNamespace } from './namespace'
-import { validateGlob } from './policy'
+import { policyFromRow, validateToolPolicy } from './policy'
 import { McpUpstreamClient, validateHttpUrl } from './upstream'
 import { UpstreamOAuth } from './oauth'
 import type { OAuthClientProvider } from '@modelcontextprotocol/sdk/client/auth.js'
@@ -30,11 +30,7 @@ export class ConnectionManager {
     revision: number,
     policies: Array<ToolPolicy>,
   ) {
-    for (const policy of policies) {
-      validateGlob(policy.pattern)
-      if (!['allow', 'block', 'require_approval'].includes(policy.effect))
-        throw new Error('Invalid policy action')
-    }
+    policies.forEach(validateToolPolicy)
     await this.transaction(async (database) => {
       const result = await database.query(
         'UPDATE mcp_connections SET revision=revision+1,updated_at=now() WHERE id=$1 AND revision=$2',
@@ -47,8 +43,14 @@ export class ConnectionManager {
       ])
       for (const policy of policies)
         await database.query(
-          'INSERT INTO tool_policies(id,connection_id,pattern,effect) VALUES($1,$2,$3,$4)',
-          [randomUUID(), id, policy.pattern, policy.effect],
+          'INSERT INTO tool_policies(id,connection_id,pattern,annotation,effect) VALUES($1,$2,$3,$4,$5)',
+          [
+            randomUUID(),
+            id,
+            policy.pattern ?? null,
+            policy.annotation ?? null,
+            policy.effect,
+          ],
         )
     })
     return { revision: revision + 1 }
@@ -148,7 +150,7 @@ export class ConnectionManager {
       [id],
     )
     const policies = await this.pool.query(
-      'SELECT pattern, effect FROM tool_policies WHERE connection_id=$1',
+      'SELECT pattern, annotation, effect FROM tool_policies WHERE connection_id=$1',
       [id],
     )
     return this.create({
@@ -158,10 +160,7 @@ export class ConnectionManager {
       transport: source.transport_config as TransportConfig,
       state: 'enabled',
       groupIds: groups.rows.map((row) => row.group_id as string),
-      policies: policies.rows.map((row) => ({
-        pattern: row.pattern as string,
-        effect: row.effect,
-      })),
+      policies: policies.rows.map(policyFromRow),
     })
   }
 
@@ -546,9 +545,15 @@ export class ConnectionManager {
       )
     for (const policy of input.policies)
       await database.query(
-        `INSERT INTO tool_policies (id, connection_id, pattern, effect)
-         VALUES ($1,$2,$3,$4)`,
-        [randomUUID(), id, policy.pattern, policy.effect],
+        `INSERT INTO tool_policies (id, connection_id, pattern, annotation, effect)
+         VALUES ($1,$2,$3,$4,$5)`,
+        [
+          randomUUID(),
+          id,
+          policy.pattern ?? null,
+          policy.annotation ?? null,
+          policy.effect,
+        ],
       )
     await insertTools(database, id, tools)
     await database.query(
@@ -593,7 +598,7 @@ function validateInput(input: ConnectionInput) {
   if (input.transport.kind === 'streamable_http')
     for (const name of Object.keys(input.transport.headers ?? {}))
       validateHeaderName(name)
-  for (const policy of input.policies) validateGlob(policy.pattern)
+  input.policies.forEach(validateToolPolicy)
 }
 
 function validateHeaderName(name: string) {
@@ -634,14 +639,15 @@ async function insertTools(
   for (const tool of tools)
     await database.query(
       `INSERT INTO connection_tools
-       (connection_id, name, description, input_schema, output_schema)
-       VALUES ($1,$2,$3,$4,$5)`,
+       (connection_id, name, description, input_schema, output_schema, annotations)
+       VALUES ($1,$2,$3,$4,$5,$6)`,
       [
         id,
         tool.name,
         tool.description ?? null,
         tool.inputSchema,
         tool.outputSchema ?? null,
+        tool.annotations ?? null,
       ],
     )
 }

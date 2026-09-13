@@ -1,11 +1,18 @@
 import { useState } from 'react'
-import { UiIcon } from './ui-icon'
 import {
+  annotationLabels,
   evaluateToolPolicy,
+  resolveToolPolicy,
   setToolPolicy,
-  validateGlob,
+  validateToolPolicy,
 } from '../connections/policy'
-import type { ToolPolicy, ToolPolicyEffect } from '../connections/types'
+import { UiIcon } from './ui-icon'
+import type { ToolAnnotations } from '@modelcontextprotocol/sdk/types.js'
+import type {
+  ToolPolicy,
+  ToolPolicyAnnotation,
+  ToolPolicyEffect,
+} from '../connections/types'
 
 const effects: Record<ToolPolicyEffect, string> = {
   block: 'Block',
@@ -15,7 +22,11 @@ const effects: Record<ToolPolicyEffect, string> = {
 
 export function ToolPolicyEditor(p: {
   policies: Array<ToolPolicy>
-  tools: Array<{ name: string; description?: string }>
+  tools: Array<{
+    name: string
+    description?: string
+    annotations?: ToolAnnotations
+  }>
   change: (policies: Array<ToolPolicy>) => void
 }) {
   const [search, setSearch] = useState('')
@@ -23,7 +34,7 @@ export function ToolPolicyEditor(p: {
   const selectedTool = p.tools.find((tool) => tool.name === selected)
   let error = ''
   try {
-    p.policies.forEach(({ pattern }) => validateGlob(pattern))
+    p.policies.forEach(validateToolPolicy)
   } catch (e) {
     error = e instanceof Error ? e.message : 'Invalid pattern'
   }
@@ -59,11 +70,61 @@ export function ToolPolicyEditor(p: {
           ))}
         </select>
       </label>
+      <section className="policy-definitions" aria-label="Annotation rules">
+        <h3>Annotation rules</h3>
+        <div className="policy-annotation-rules">
+          {Object.entries(annotationLabels).map(([key, label]) => (
+            <label className="field" key={key}>
+              <span>{label}</span>
+              <select
+                aria-label={label + ' rule'}
+                value={
+                  p.policies.find((rule) => rule.annotation === key)?.effect ??
+                  ''
+                }
+                onChange={(event) => {
+                  const others = p.policies.filter(
+                    (rule) => rule.annotation !== key,
+                  )
+                  p.change(
+                    event.target.value
+                      ? [
+                          ...others,
+                          {
+                            annotation: key as ToolPolicyAnnotation,
+                            effect: event.target.value as ToolPolicyEffect,
+                          },
+                        ]
+                      : others,
+                  )
+                }}
+              >
+                <option value="">No rule</option>
+                {Object.entries(effects).map(([value, text]) => (
+                  <option key={value} value={value}>
+                    {text}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ))}
+        </div>
+        <p>
+          Destructive excludes read-only tools. Missing annotations count as
+          potentially destructive and open-world. These rules rely on the
+          upstream server's annotations.
+        </p>
+      </section>
       <section className="policy-definitions" aria-label="Policy definitions">
         <div className="toolbar">
           <h3>
             Pattern rules (
-            {p.policies.filter(({ pattern }) => pattern !== '*').length})
+            {
+              p.policies.filter(
+                (rule) => rule.pattern !== undefined && rule.pattern !== '*',
+              ).length
+            }
+            )
           </h3>
           <button
             type="button"
@@ -82,17 +143,22 @@ export function ToolPolicyEditor(p: {
           case-sensitive; brackets and braces are not supported.
         </p>
         <p>
-          The rule with the most non-wildcard characters wins. Ties prefer
-          Block, then Require approval, then Allow. Tools with no matching rule
-          are blocked. The tool list shows the result, and setting a tool's
-          action there adds a rule for that exact name, or removes it when the
-          rules already give that action.
+          Exact tool overrides win, then name patterns, then annotation rules,
+          then the default. Among patterns, the most non-wildcard characters
+          wins. Ties prefer Block, then Require approval, then Allow. Tools with
+          no matching rule are blocked. The tool list shows the result, and
+          setting a tool's action there adds a rule for that exact name, or
+          removes it when the rules already give that action.
         </p>
-        {p.policies.every(({ pattern }) => pattern === '*') && (
-          <p>No pattern rules. All tools use the default action.</p>
+        {p.policies.every(
+          (rule) => rule.pattern === undefined || rule.pattern === '*',
+        ) && (
+          <p>
+            No pattern rules. Annotation rules and the default action apply.
+          </p>
         )}
         {p.policies.map((rule, index) =>
-          rule.pattern === '*' ? null : (
+          rule.pattern === undefined || rule.pattern === '*' ? null : (
             <div className="policy-rule" key={index}>
               <label className="field">
                 <span>Tool name or pattern</span>
@@ -104,7 +170,7 @@ export function ToolPolicyEditor(p: {
                     p.change(
                       p.policies.map((current, i) =>
                         i === index
-                          ? { ...current, pattern: e.target.value }
+                          ? { effect: current.effect, pattern: e.target.value }
                           : current,
                       ),
                     )
@@ -160,7 +226,7 @@ export function ToolPolicyEditor(p: {
           {Object.entries(effects)
             .map(
               ([effect, label]) =>
-                `${p.tools.filter((tool) => evaluateToolPolicy(p.policies, tool.name) === effect).length} ${label.toLowerCase()}`,
+                `${p.tools.filter((tool) => evaluateToolPolicy(p.policies, tool.name, tool.annotations) === effect).length} ${label.toLowerCase()}`,
             )
             .join(' · ')}
         </p>
@@ -182,9 +248,7 @@ export function ToolPolicyEditor(p: {
               placeholder="Search names and descriptions"
             />
           </label>
-          <div
-            className={`tool-browser ${selectedTool ? 'has-selection' : ''}`}
-          >
+          <div className="tool-browser has-selection">
             <div className="policy-tools" aria-label="Discovered tools">
               {tools.map((tool) => {
                 return (
@@ -213,7 +277,13 @@ export function ToolPolicyEditor(p: {
                         aria-label={`Action for ${tool.name}`}
                         disabled={Boolean(error)}
                         value={
-                          error ? '' : evaluateToolPolicy(p.policies, tool.name)
+                          error
+                            ? ''
+                            : evaluateToolPolicy(
+                                p.policies,
+                                tool.name,
+                                tool.annotations,
+                              )
                         }
                         onChange={(e) =>
                           p.change(
@@ -221,6 +291,7 @@ export function ToolPolicyEditor(p: {
                               p.policies,
                               tool.name,
                               e.target.value as ToolPolicyEffect,
+                              tool.annotations,
                             ),
                           )
                         }
@@ -234,30 +305,51 @@ export function ToolPolicyEditor(p: {
                           </option>
                         ))}
                       </select>
+                      {!error && (
+                        <small>
+                          {
+                            resolveToolPolicy(
+                              p.policies,
+                              tool.name,
+                              tool.annotations,
+                            ).source
+                          }
+                        </small>
+                      )}
                     </label>
                   </article>
                 )
               })}
             </div>
-            {selectedTool && (
-              <aside
-                className="tool-description"
-                aria-label={`Description of ${selectedTool.name}`}
-              >
-                <div className="toolbar">
-                  <b>{selectedTool.name}</b>
-                  <button
-                    type="button"
-                    className="secondary"
-                    aria-label="Close tool description"
-                    onClick={() => setSelected(undefined)}
-                  >
-                    <UiIcon name="close" />
-                  </button>
-                </div>
-                <p>{selectedTool.description || 'No description provided.'}</p>
-              </aside>
-            )}
+            <aside
+              className="tool-description"
+              aria-label={
+                selectedTool
+                  ? `Description of ${selectedTool.name}`
+                  : 'Tool description'
+              }
+            >
+              {selectedTool ? (
+                <>
+                  <div className="toolbar">
+                    <b>{selectedTool.name}</b>
+                    <button
+                      type="button"
+                      className="secondary"
+                      aria-label="Close tool description"
+                      onClick={() => setSelected(undefined)}
+                    >
+                      <UiIcon name="close" />
+                    </button>
+                  </div>
+                  <p>
+                    {selectedTool.description || 'No description provided.'}
+                  </p>
+                </>
+              ) : (
+                <p>Select a tool to read its full description.</p>
+              )}
+            </aside>
           </div>
           {tools.length === 0 && <p>No tools match this search.</p>}
         </>

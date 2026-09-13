@@ -106,6 +106,23 @@ test('built-in tool policies persist and reject stale or invalid edits', async (
   await setBuiltinToolPolicies(pool, initial.revision + 1, initial.policies)
 })
 
+test('built-in annotation policies persist and use the built-in tool annotations', async () => {
+  const initial = await builtinConnection(pool)
+  try {
+    await setBuiltinToolPolicies(pool, initial.revision, [
+      { pattern: '*', effect: 'block' },
+      { annotation: 'read_only', effect: 'allow' },
+      { annotation: 'destructive', effect: 'require_approval' },
+    ])
+    expect(
+      (await builtinConnection(pool)).tools.map((tool) => tool.policy),
+    ).toEqual(['allow', 'require_approval', 'require_approval'])
+  } finally {
+    const current = await builtinConnection(pool)
+    await setBuiltinToolPolicies(pool, current.revision, initial.policies)
+  }
+})
+
 afterAll(async () => {
   await pool.end()
   await Bun.sleep(10)

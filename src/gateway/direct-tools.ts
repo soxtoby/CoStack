@@ -58,7 +58,7 @@ export function directTools(tools: Array<GatewayTool>): Array<DirectTool> {
             selectors.length > 1 ? ['account', 'arguments'] : ['arguments'],
           additionalProperties: false,
         },
-        annotations: { destructiveHint: true, openWorldHint: true },
+        ...(tool.annotations ? { annotations: tool.annotations } : {}),
       },
     }
   })

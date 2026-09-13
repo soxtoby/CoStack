@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto'
-import { evaluateToolPolicy } from '../connections/policy'
+import { evaluateToolPolicy, policyFromRow } from '../connections/policy'
 import { writeAudit } from './audit'
 import { builtinConnection } from './builtin-tools'
 import type { ConnectionManager } from '../connections/manager'
@@ -59,10 +59,10 @@ export class GatewayService {
   ): Promise<Array<GatewayTool>> {
     const result = await this.pool.query(
       `SELECT c.id connection_id, c.display_name connection_name, c.namespace connection_namespace,
-              t.name tool_name, t.description, t.input_schema, t.output_schema,
+              t.name tool_name, t.description, t.input_schema, t.output_schema, t.annotations,
               h.healthy, h.error health_error,
               a.id account_id, a.display_name account_name, a.namespace account_namespace, a.kind account_kind,
-              p.pattern, p.effect
+              p.pattern, p.annotation, p.effect
        FROM mcp_connections c
        JOIN connection_groups cg ON cg.connection_id=c.id
        JOIN group_memberships gm ON gm.group_id=cg.group_id AND gm.principal_id=$1
@@ -87,15 +87,16 @@ export class GatewayService {
         row: Record<string, unknown>
         policies: Array<ToolPolicy>
       } = grouped.get(key) ?? { row, policies: [] }
-      item.policies.push({
-        pattern: row.pattern as string,
-        effect: row.effect as ToolPolicy['effect'],
-      })
+      item.policies.push(policyFromRow(row))
       grouped.set(key, item)
     }
     const terms = query.toLowerCase().split(/\s+/).filter(Boolean)
     const tools = [...grouped.values()].flatMap(({ row, policies }) => {
-      const policy = evaluateToolPolicy(policies, row.tool_name as string)
+      const policy = evaluateToolPolicy(
+        policies,
+        row.tool_name as string,
+        row.annotations ?? undefined,
+      )
       if (policy === 'block') return []
       const namespace = (row.account_namespace ??
         row.connection_namespace) as string
@@ -121,6 +122,11 @@ export class GatewayService {
             ? { description: row.description as string }
             : {}),
           inputSchema: row.input_schema as Record<string, unknown>,
+          ...(row.annotations
+            ? {
+                annotations: row.annotations,
+              }
+            : {}),
           ...(row.output_schema
             ? { outputSchema: row.output_schema as Record<string, unknown> }
             : {}),

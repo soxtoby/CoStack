@@ -65,7 +65,7 @@ A locally managed collection of Principals used to assign Capabilities and MCP a
 _Avoid_: SSO group, team
 
 **Tool Policy**:
-The access rule for one tool or a wildcard set of tools on an MCP Connection. Its effect is Allow, Require Approval, or Block.
+An access rule matching a tool name, a wildcard set of names, or an annotation condition on an MCP Connection. Its effect is Allow, Require Approval, or Block.
 _Avoid_: Tool permission, ACL
 
 **Approval Request**:

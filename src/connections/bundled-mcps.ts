@@ -1,3 +1,4 @@
+import { defaultToolPolicies } from './policy'
 import { OFFICIAL_REGISTRY } from './registry'
 import type { RegistryServer } from './registry'
 import type { ConnectionInput, TransportConfig } from './types'
@@ -117,7 +118,7 @@ export function bundledPrefill(
     transport: structuredClone(entry.transport),
     state: 'enabled',
     groupIds: [],
-    policies: [{ pattern: '*', effect: 'block' }],
+    policies: defaultToolPolicies(),
   }
 }
 

@@ -1,4 +1,5 @@
 import type { ToolPolicyEffect } from '../connections/types'
+import type { ToolAnnotations } from '@modelcontextprotocol/sdk/types.js'
 
 export type GatewayPrincipal = {
   id: string
@@ -21,6 +22,7 @@ export type GatewayTool = {
   description?: string
   inputSchema: Record<string, unknown>
   outputSchema?: Record<string, unknown>
+  annotations?: ToolAnnotations
   policy: Exclude<ToolPolicyEffect, 'block'>
   available: boolean
   healthError?: string

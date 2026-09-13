@@ -144,7 +144,7 @@ describe('registry import', () => {
     expect(input.state).toBe('enabled')
   })
 
-  test('creates an unsaved, blocked Bun connection prefill', () => {
+  test('creates an unsaved Bun connection prefill with annotation defaults', () => {
     const registry = new RegistryClient()
     const result = registry.prefill(
       {
@@ -168,7 +168,11 @@ describe('registry import', () => {
       command: 'bunx',
       args: ['@example/github-mcp@1.2.3'],
     })
-    expect(result.policies).toEqual([{ pattern: '*', effect: 'block' }])
+    expect(result.policies).toEqual([
+      { pattern: '*', effect: 'block' },
+      { annotation: 'read_only', effect: 'allow' },
+      { annotation: 'destructive', effect: 'require_approval' },
+    ])
     expect(result.state).toBe('enabled')
   })
 

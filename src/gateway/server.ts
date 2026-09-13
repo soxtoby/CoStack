@@ -5,10 +5,9 @@ import {
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js'
 import { AjvJsonSchemaValidator } from '@modelcontextprotocol/sdk/validation/ajv'
-import { evaluateToolPolicy } from '../connections/policy'
 import { directTools, selectAccount } from './direct-tools'
 import { GatewayError } from './service'
-import { builtinTools } from './builtin-tools'
+import { builtinTools, evaluateBuiltinToolPolicy } from './builtin-tools'
 import type { GatewayService } from './service'
 import type { GatewayPrincipal, GatewayTool } from './types'
 import type { ToolPolicy } from '../connections/types'
@@ -20,7 +19,7 @@ export async function createGatewayServer(
   clientId?: string,
   policies: Array<ToolPolicy> = [{ pattern: '*', effect: 'allow' }],
 ) {
-  const searchPolicy = evaluateToolPolicy(policies, 'search_tools')
+  const searchPolicy = evaluateBuiltinToolPolicy(policies, 'search_tools')
   const catalog =
     searchPolicy === 'allow' ? await service.search(principal) : []
   const connectionNames =
@@ -80,7 +79,10 @@ export async function createGatewayServer(
     })
   }
   async function authorize(name: string, signal: AbortSignal) {
-    const effect = evaluateToolPolicy(await service.builtinToolPolicies(), name)
+    const effect = evaluateBuiltinToolPolicy(
+      await service.builtinToolPolicies(),
+      name,
+    )
     if (effect === 'block')
       throw new GatewayError('Tool is blocked', 'tool_blocked')
     if (effect !== 'require_approval') return
@@ -113,14 +115,16 @@ export async function createGatewayServer(
     if (response.action !== 'accept' || response.content?.approve !== true)
       throw new GatewayError('User declined approval', 'approval_declined')
     if (
-      evaluateToolPolicy(await service.builtinToolPolicies(), name) === 'block'
+      evaluateBuiltinToolPolicy(await service.builtinToolPolicies(), name) ===
+      'block'
     )
       throw new GatewayError('Tool is blocked', 'tool_blocked')
   }
-  if (evaluateToolPolicy(policies, 'search_tools') !== 'block')
+  if (evaluateBuiltinToolPolicy(policies, 'search_tools') !== 'block')
     registerTool(
       'search_tools',
       {
+        annotations: builtinTools[0]!.annotations,
         description:
           builtinTools[0]!.description +
           (connectionNames.length
@@ -149,11 +153,12 @@ export async function createGatewayServer(
       .optional()
       .default({}),
   }
-  if (evaluateToolPolicy(policies, 'call_tool') !== 'block')
+  if (evaluateBuiltinToolPolicy(policies, 'call_tool') !== 'block')
     registerTool(
       'call_tool',
       {
         description: builtinTools[1]!.description,
+        annotations: builtinTools[1]!.annotations,
         inputSchema: callSchema,
       },
       async ({ name, arguments: args }, extra) => {
@@ -184,17 +189,15 @@ export async function createGatewayServer(
         )
       },
     )
-  if (evaluateToolPolicy(policies, 'call_tool_with_approval') !== 'block')
+  if (
+    evaluateBuiltinToolPolicy(policies, 'call_tool_with_approval') !== 'block'
+  )
     registerTool(
       'call_tool_with_approval',
       {
         description: builtinTools[2]!.description,
         inputSchema: callSchema,
-        annotations: {
-          title: 'Call tool with approval',
-          destructiveHint: true,
-          openWorldHint: true,
-        },
+        annotations: builtinTools[2]!.annotations,
       },
       async ({ name, arguments: args }, extra) => {
         await authorize('call_tool_with_approval', extra.signal)
@@ -217,14 +220,19 @@ export async function createGatewayServer(
       ? 'call_tool_with_approval'
       : 'call_tool'
   for (const tool of direct) {
-    if (evaluateToolPolicy(policies, callPath(tool.accounts[0]!)) === 'block')
+    if (
+      evaluateBuiltinToolPolicy(policies, callPath(tool.accounts[0]!)) ===
+      'block'
+    )
       continue
     registered.set(tool.definition.name, {
       definition: tool.definition,
       call: async (input, signal) => {
         // Re-resolve against current access, accounts and policies on every call.
         const currentPolicies = await service.builtinToolPolicies()
-        if (evaluateToolPolicy(currentPolicies, 'search_tools') !== 'allow')
+        if (
+          evaluateBuiltinToolPolicy(currentPolicies, 'search_tools') !== 'allow'
+        )
           throw new GatewayError(
             'Direct discovery is restricted; use authorized meta-tools',
             'tool_blocked',

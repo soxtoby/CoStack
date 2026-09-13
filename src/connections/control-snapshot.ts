@@ -4,9 +4,9 @@ import {
   builtinConnectionId,
 } from '../gateway/builtin-tools'
 import { findBundledMcp } from './bundled-mcps'
-import { evaluateToolPolicy } from './policy'
+import { evaluateToolPolicy, policyFromRow } from './policy'
 import type { PrincipalAuthorization } from '../auth/authorization'
-import type { ToolPolicy, TransportConfig } from './types'
+import type { TransportConfig } from './types'
 import type { Pool } from 'pg'
 
 export async function connectionSnapshot(
@@ -105,11 +105,11 @@ async function connectionDetail(
       [id, canViewAll, userId],
     ),
     pool.query(
-      'SELECT pattern,effect FROM tool_policies WHERE connection_id=$1 ORDER BY pattern',
+      'SELECT pattern,annotation,effect FROM tool_policies WHERE connection_id=$1 ORDER BY pattern',
       [id],
     ),
     pool.query(
-      'SELECT name,description,input_schema,output_schema FROM connection_tools WHERE connection_id=$1 ORDER BY name',
+      'SELECT name,description,input_schema,output_schema,annotations FROM connection_tools WHERE connection_id=$1 ORDER BY name',
       [id],
     ),
     pool.query(
@@ -124,12 +124,13 @@ async function connectionDetail(
   return {
     ...row,
     transport_config: transport,
-    policies: policies.rows,
+    policies: policies.rows.map(policyFromRow),
     tools: tools.rows.map((tool) => ({
       ...tool,
       policy: evaluateToolPolicy(
-        policies.rows as Array<ToolPolicy>,
+        policies.rows.map(policyFromRow),
         tool.name as string,
+        tool.annotations ?? undefined,
       ),
     })),
     accounts: accounts.rows,

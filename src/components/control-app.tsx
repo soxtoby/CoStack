@@ -7,7 +7,7 @@ import {
 } from '@tanstack/react-router'
 import { createContext, useContext, useEffect, useRef, useState } from 'react'
 import { ToolPolicyEditor } from '../components/tool-policy-editor'
-import { validateGlob } from '../connections/policy'
+import { defaultToolPolicies, validateToolPolicy } from '../connections/policy'
 import { deriveNamespace } from '../connections/namespace'
 import { rankRegistryServers } from '../connections/registry-ranking'
 import {
@@ -27,6 +27,7 @@ import { McpIcon } from './mcp-icon'
 import { UiIcon } from './ui-icon'
 import { responseError } from './response-error'
 import type { FormEvent, ReactNode } from 'react'
+import type { ToolAnnotations } from '@modelcontextprotocol/sdk/types.js'
 import type { BundledMcp } from '../connections/bundled-mcps'
 import type { ConnectionInput, ToolPolicy } from '../connections/types'
 import type { RegistryServer } from '../connections/registry'
@@ -260,7 +261,12 @@ type ControlData = {
     registry_version?: string | null
     error?: string
     policies: Array<ToolPolicy>
-    tools: Array<{ name: string; description?: string; policy: string }>
+    tools: Array<{
+      name: string
+      description?: string
+      policy: string
+      annotations?: ToolAnnotations
+    }>
     accounts: Array<{
       id: string
       kind: 'shared' | 'personal'
@@ -397,7 +403,7 @@ export function ConnectionForm(p: {
       title={p.initial ? 'Review connection' : 'New MCP Connection'}
       submit="Validate and save"
       go={async (f) => {
-        const policies: Array<ToolPolicy> = [{ pattern: '*', effect: 'block' }]
+        const policies = defaultToolPolicies()
         const transport =
           p.initial?.transport ??
           (kind === 'streamable_http'
@@ -536,9 +542,9 @@ export function ConnectionForm(p: {
         description="Select the Groups that should have access to this connection."
       />
       <p>
-        Tools start blocked. Save this connection to discover its tools, then
-        choose an action for each tool in Configure → Tools. Servers requiring
-        authentication need an Account before discovery can succeed.
+        Read-only tools start allowed; destructive tools require approval. Other
+        tools start blocked. Adjust policies in Configure → Tools. Servers
+        requiring authentication need an Account before discovery can succeed.
       </p>
     </Form>
   )
@@ -681,6 +687,7 @@ function EditConnectionForm(p: {
   changed: () => void
   tab: 'connection' | 'tools'
   revert: () => void
+  actions?: ReactNode
   groups: Array<Group>
   detail: NonNullable<ControlData['detail']>
   done: () => void
@@ -694,11 +701,12 @@ function EditConnectionForm(p: {
     <div className="configuration-editor">
       <Form
         topActions
+        actionControls={p.actions}
         revert={p.revert}
         submit="Save changes"
         go={async (f) => {
           if (!settingsChanged) {
-            policies.forEach(({ pattern }) => validateGlob(pattern))
+            policies.forEach(validateToolPolicy)
             await controlAct('set-tool-policies', {
               id: d.id,
               revision: d.revision,
@@ -707,7 +715,7 @@ function EditConnectionForm(p: {
             p.done()
             return
           }
-          policies.forEach(({ pattern }) => validateGlob(pattern))
+          policies.forEach(validateToolPolicy)
           const input = {
             organizationId: '',
             displayName: String(f.get('displayName')),
@@ -2123,6 +2131,7 @@ function Toggle(p: {
 function Form(p: {
   className?: string
   topActions?: boolean
+  actionControls?: ReactNode
   revert?: () => void
   disabled?: boolean
   go: (f: FormData) => Promise<void>
@@ -2169,7 +2178,7 @@ function Form(p: {
               {error}
             </p>
           )}
-          <span>Revert discards these edits.</span>
+          {p.actionControls}
           <button
             type="button"
             className="secondary"
@@ -2375,7 +2384,6 @@ export function ConfigureConnectionPage({
   const { control, error, reload } = useConnectionData(connectionId)
   const [actionError, setActionError] = useState('')
   const [busy, setBusy] = useState(false)
-  const [saved, setSaved] = useState(false)
   const [dirty, setDirty] = useState(false)
   const [editRevision, setEditRevision] = useState(0)
   const canManage =
@@ -2391,7 +2399,6 @@ export function ConfigureConnectionPage({
   const run = async (action: string, extra: Record<string, unknown> = {}) => {
     setBusy(true)
     setActionError('')
-    setSaved(false)
     try {
       await controlAct(action, { id: connectionId, ...extra })
       reload()
@@ -2442,31 +2449,6 @@ export function ConfigureConnectionPage({
         </Link>
       </div>
       <div className="configuration-content">
-        <div className="toolbar config-actions">
-          <span>
-            {saved ? 'Changes saved.' : 'Save changes to apply your edits.'}
-          </span>
-          {!d.builtin &&
-            (tab === 'tools' ? (
-              <button
-                className="secondary"
-                disabled={busy || dirty}
-                onClick={() => void run('refresh-connection')}
-              >
-                {busy ? 'Refreshing…' : 'Refresh tools'}
-              </button>
-            ) : (
-              <button
-                className="secondary"
-                disabled={busy || dirty}
-                onClick={() =>
-                  void run('set-enabled', { enabled: d.state !== 'enabled' })
-                }
-              >
-                {d.state === 'enabled' ? 'Disable' : 'Enable'}
-              </button>
-            ))}
-        </div>
         {actionError && (
           <p className="error" role="alert">
             {actionError}
@@ -2475,8 +2457,31 @@ export function ConfigureConnectionPage({
         <EditConnectionForm
           changed={() => {
             setDirty(true)
-            setSaved(false)
           }}
+          actions={
+            !d.builtin &&
+            (tab === 'tools' ? (
+              <button
+                type="button"
+                className="secondary"
+                disabled={busy || dirty}
+                onClick={() => void run('refresh-connection')}
+              >
+                {busy ? 'Refreshing…' : 'Refresh tools'}
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="secondary"
+                disabled={busy || dirty}
+                onClick={() =>
+                  void run('set-enabled', { enabled: d.state !== 'enabled' })
+                }
+              >
+                {d.state === 'enabled' ? 'Disable' : 'Enable'}
+              </button>
+            ))
+          }
           key={`${d.id}:${d.revision}:${editRevision}`}
           detail={d}
           groups={data.groups ?? []}
@@ -2484,11 +2489,9 @@ export function ConfigureConnectionPage({
           revert={() => {
             setEditRevision((value) => value + 1)
             setDirty(false)
-            setSaved(false)
           }}
           done={() => {
             setDirty(false)
-            setSaved(true)
             reload()
           }}
         />

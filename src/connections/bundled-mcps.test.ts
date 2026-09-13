@@ -18,7 +18,7 @@ test('finds GitHub immediately and by name, alias, or multiple words', () => {
   expect(searchBundledMcps('unrelatedxyz')).toEqual([])
 })
 
-test('prefills an enabled blocked connection without registry access or fictional provenance', () => {
+test('prefills an enabled connection with annotation defaults without registry access or fictional provenance', () => {
   const github = bundledMcps.find((entry) => entry.id === 'github')!
   const input = bundledPrefill(github, 'org')
   expect(input).toEqual({
@@ -30,7 +30,11 @@ test('prefills an enabled blocked connection without registry access or fictiona
     },
     state: 'enabled',
     groupIds: [],
-    policies: [{ pattern: '*', effect: 'block' }],
+    policies: [
+      { pattern: '*', effect: 'block' },
+      { annotation: 'read_only', effect: 'allow' },
+      { annotation: 'destructive', effect: 'require_approval' },
+    ],
   })
   expect(input.transport).not.toBe(github.transport)
   expect(

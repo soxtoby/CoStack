@@ -1,3 +1,5 @@
+import type { ToolAnnotations } from '@modelcontextprotocol/sdk/types.js'
+
 export type ToolPolicyEffect = 'allow' | 'require_approval' | 'block'
 export type ConnectionState = 'enabled' | 'disabled'
 
@@ -21,7 +23,11 @@ export type OAuthClientConfig = {
 }
 
 export type TransportConfig = StdioConfig | HttpConfig
-export type ToolPolicy = { pattern: string; effect: ToolPolicyEffect }
+export type ToolPolicyAnnotation = 'read_only' | 'destructive' | 'open_world'
+export type ToolPolicy = { effect: ToolPolicyEffect } & (
+  | { pattern: string; annotation?: never }
+  | { annotation: ToolPolicyAnnotation; pattern?: never }
+)
 
 export type ConnectionInput = {
   organizationId: string
@@ -39,6 +45,7 @@ export type DiscoveredTool = {
   description?: string
   inputSchema: Record<string, unknown>
   outputSchema?: Record<string, unknown>
+  annotations?: ToolAnnotations
 }
 
 export type AccountSummary = {

@@ -1,3 +1,4 @@
+import { defaultToolPolicies } from './policy'
 import type { ConnectionInput, TransportConfig } from './types'
 
 export const OFFICIAL_REGISTRY = 'https://registry.modelcontextprotocol.io'
@@ -65,7 +66,7 @@ export class RegistryClient {
       transport: registryTransport(server),
       state: 'enabled',
       groupIds: [],
-      policies: [{ pattern: '*', effect: 'block' }],
+      policies: defaultToolPolicies(),
       registry: { sourceId, serverId: server.name, version: server.version },
     }
   }

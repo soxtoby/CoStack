@@ -4,6 +4,17 @@ import { setToolPolicy } from '../connections/policy'
 import { ToolPolicyEditor } from './tool-policy-editor'
 import type { ToolPolicy } from '../connections/types'
 
+test('keeps the sticky description attached to the configuration scroller', async () => {
+  const css = await Bun.file(new URL('../styles.css', import.meta.url)).text()
+  expect(css).toMatch(/\.configuration-editor\s*{[^}]*overflow:\s*clip;[^}]*}/s)
+  expect(css).toMatch(
+    /\.tool-description\s*{[^}]*position:\s*sticky;[^}]*top:\s*calc\(var\(--configuration-actions-height\) \+ 12px\);[^}]*}/s,
+  )
+  expect(css).toMatch(
+    /\.form-actions\s*{[^}]*position:\s*sticky;[^}]*top:\s*0;[^}]*}/s,
+  )
+})
+
 /** The action rendered as selected in a tool row's dropdown. */
 function selectedAction(html: string, tool: string) {
   const row = html.slice(html.indexOf(`Action for ${tool}`))
@@ -50,6 +61,8 @@ test('keeps long descriptions out of unselected tool rows', () => {
   expect(html).not.toContain('Full description details.')
   expect(html).toContain('aria-expanded="false"')
   expect(html).toContain('aria-label="Action for read_issue"')
+  expect(html).toContain('aria-label="Tool description"')
+  expect(html).toContain('Select a tool to read its full description.')
 })
 
 test('shows discovered descriptions and evaluates overlapping rules in the editor', () => {
@@ -124,4 +137,32 @@ test('invalid draft patterns produce an error instead of breaking tool previews'
   expect(html).toContain('role="alert"')
   expect(html).toContain('Unsupported tool glob')
   expect(html).toContain('Fix invalid patterns')
+})
+
+test('annotation selectors, tool actions and winning-rule explanations agree', () => {
+  const html = renderToStaticMarkup(
+    <ToolPolicyEditor
+      policies={[
+        { pattern: '*', effect: 'block' },
+        { annotation: 'read_only', effect: 'allow' },
+        { annotation: 'destructive', effect: 'require_approval' },
+        { pattern: 'delete_one', effect: 'allow' },
+      ]}
+      tools={[
+        { name: 'read', annotations: { readOnlyHint: true } },
+        { name: 'unknown' },
+        { name: 'delete_one' },
+      ]}
+      change={() => {}}
+    />,
+  )
+  expect(html).toContain('aria-label="Destructive rule"')
+  expect(html).toContain('Read-only rule')
+  expect(html).toContain('Destructive rule')
+  expect(html).toContain('Tool override: delete_one')
+  expect(selectedAction(html, 'read')).toBe('allow')
+  expect(selectedAction(html, 'unknown')).toBe('require_approval')
+  expect(selectedAction(html, 'delete_one')).toBe('allow')
+  expect(html).toContain('1 require approval')
+  expect(html).toContain('2 allow')
 })

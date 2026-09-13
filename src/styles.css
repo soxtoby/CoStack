@@ -1156,9 +1156,10 @@ fieldset {
   border-bottom: 2px solid var(--accent);
 }
 .configuration-editor {
+  --configuration-actions-height: 55px;
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  overflow: hidden;
+  overflow: clip;
 }
 .configuration-editor .action-form.top-actions {
   display: flex;
@@ -1177,20 +1178,19 @@ fieldset {
   gap: 16px;
 }
 .form-actions {
+  position: sticky;
+  top: 0;
+  z-index: 4;
   flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: flex-end;
   flex-wrap: wrap;
+  min-height: var(--configuration-actions-height);
   gap: 12px;
   padding: 12px 16px;
   border-bottom: 1px solid var(--line);
   background: var(--bg-sunken);
-}
-.form-actions > span {
-  margin-right: auto;
-  color: var(--text-muted);
-  font-size: 12.5px;
 }
 .form-actions > .error {
   width: 100%;
@@ -1236,6 +1236,11 @@ fieldset {
 }
 .policy-definitions .policy-rule {
   margin: 0;
+}
+.policy-annotation-rules {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
 }
 .policy-rule {
   display: grid;
@@ -1328,6 +1333,9 @@ fieldset {
   font-size: 12.5px;
 }
 .tool-description {
+  position: sticky;
+  top: calc(var(--configuration-actions-height) + 12px);
+  align-self: start;
   padding: 12px;
   border: 1px solid var(--line);
   border-radius: var(--radius);
@@ -1575,6 +1583,7 @@ fieldset {
   }
   .tool-description {
     order: -1;
+    top: calc(var(--configuration-actions-height) + 8px);
     max-height: 200px;
   }
   .account-cards article {
@@ -1695,6 +1704,7 @@ fieldset {
   .account-cards article,
   .audit-table article,
   .form-grid,
+  .policy-annotation-rules,
   .sso-form .form-grid {
     grid-template-columns: minmax(0, 1fr);
   }

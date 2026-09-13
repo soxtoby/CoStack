@@ -43,6 +43,8 @@ describe('database schema', () => {
       { name: '0007_builtin_tools.sql' },
       { name: '0008_sso_email_verification.sql' },
       { name: '0009_account_namespace_claims.sql' },
+      { name: '0010_tool_annotations.sql' },
+      { name: '0011_annotation_policies.sql' },
     ])
   })
 
