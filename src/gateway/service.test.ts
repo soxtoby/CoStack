@@ -8,7 +8,6 @@ import { ElicitRequestSchema } from '@modelcontextprotocol/sdk/types.js'
 import { AjvJsonSchemaValidator } from '@modelcontextprotocol/sdk/validation/ajv'
 import { migrate } from '../database/migrate'
 import { GatewayError, GatewayService } from './service'
-import { builtinConnection, setBuiltinToolPolicies } from './builtin-tools'
 import { createGatewayServer } from './server'
 import type { GatewayPrincipal } from './types'
 
@@ -79,50 +78,6 @@ beforeAll(async () => {
   )
 })
 
-test('built-in tool policies persist and reject stale or invalid edits', async () => {
-  const initial = await builtinConnection(pool)
-  expect(initial.tools.map((tool) => tool.name)).toEqual([
-    'search_tools',
-    'call_tool',
-    'call_tool_with_approval',
-  ])
-  expect(initial.tools.every((tool) => tool.policy === 'allow')).toBe(true)
-  const policies = [
-    { pattern: '*', effect: 'allow' },
-    { pattern: 'call_*', effect: 'block' },
-  ] as const
-  await setBuiltinToolPolicies(pool, initial.revision, [...policies])
-  expect(
-    (await builtinConnection(pool)).tools.map((tool) => tool.policy),
-  ).toEqual(['allow', 'block', 'block'])
-  await expect(
-    setBuiltinToolPolicies(pool, initial.revision, []),
-  ).rejects.toThrow('reload and retry')
-  await expect(
-    setBuiltinToolPolicies(pool, initial.revision + 1, [
-      { pattern: '[bad]', effect: 'allow' },
-    ]),
-  ).rejects.toThrow('Unsupported')
-  await setBuiltinToolPolicies(pool, initial.revision + 1, initial.policies)
-})
-
-test('built-in annotation policies persist and use the built-in tool annotations', async () => {
-  const initial = await builtinConnection(pool)
-  try {
-    await setBuiltinToolPolicies(pool, initial.revision, [
-      { pattern: '*', effect: 'block' },
-      { annotation: 'read_only', effect: 'allow' },
-      { annotation: 'destructive', effect: 'require_approval' },
-    ])
-    expect(
-      (await builtinConnection(pool)).tools.map((tool) => tool.policy),
-    ).toEqual(['allow', 'require_approval', 'require_approval'])
-  } finally {
-    const current = await builtinConnection(pool)
-    await setBuiltinToolPolicies(pool, current.revision, initial.policies)
-  }
-})
-
 afterAll(async () => {
   await pool.end()
   await Bun.sleep(10)
@@ -140,22 +95,14 @@ describe('GatewayService', () => {
       await server.connect(serverTransport)
       await client.connect(clientTransport)
       try {
-        expect(client.getInstructions()).toContain('use search_tools')
         expect(client.getInstructions()).toContain('obtain user approval')
         const tools = (await client.listTools()).tools
-        const search = tools.find((tool) => tool.name === 'search_tools')!
-        expect(search.description).toContain('Prefer directly exposed')
         expect(tools.some((tool) => tool.name === 'github.read_issue')).toBe(
           principal.id === user.id,
         )
-        expect(
-          search.description!.includes(
-            'Connected services (display names): ["GitHub"]',
-          ),
-        ).toBe(principal.id === user.id)
-        expect(
-          tools.find((tool) => tool.name === 'call_tool')!.description,
-        ).toContain('qualifiedName')
+        expect(tools.every((tool) => tool.name.startsWith('github.'))).toBe(
+          true,
+        )
       } finally {
         await client.close()
         await server.close()
@@ -163,9 +110,9 @@ describe('GatewayService', () => {
     }
   })
 
-  test('search returns authorized non-blocked tools only', async () => {
+  test('catalog returns authorized non-blocked tools only', async () => {
     expect(
-      (await service.search(user)).map((tool) => [
+      (await service.accessibleTools(user)).map((tool) => [
         tool.qualifiedName,
         tool.policy,
       ]),
@@ -173,35 +120,7 @@ describe('GatewayService', () => {
       ['github__read_issue', 'allow'],
       ['github__write_issue', 'require_approval'],
     ])
-    expect(await service.search({ ...user, id: 'other' })).toEqual([])
-  })
-
-  test('search matches all query words across fields regardless of order or whitespace', async () => {
-    for (const query of [
-      'GitHub read issue',
-      ' ISSUE\tgithub\nREAD ',
-      'github__read_issue',
-    ]) {
-      expect(
-        (await service.search(user, query)).map((tool) => tool.qualifiedName),
-      ).toEqual(['github__read_issue'])
-    }
-    expect(await service.search(user, 'github read missing')).toEqual([])
-    expect(
-      (
-        await service.search(
-          user,
-          'github read issue assigned me recently updated',
-        )
-      ).map((tool) => tool.qualifiedName),
-    ).toEqual(['github__read_issue'])
-    expect(await service.search(user, 'github secret')).toEqual([])
-    expect(
-      await service.search({ ...user, id: 'other' }, 'github read'),
-    ).toEqual([])
-    expect(await service.search(user, ' \t\n')).toEqual(
-      await service.search(user),
-    )
+    expect(await service.accessibleTools({ ...user, id: 'other' })).toEqual([])
   })
 
   test('routes allow and approval paths without weakening policy', async () => {
@@ -426,11 +345,10 @@ describe('GatewayService', () => {
     }
   })
 
-  test('single-account direct calls omit selectors and honor changed built-in policies', async () => {
+  test('single-account direct calls omit selectors', async () => {
     await pool.query(
       "INSERT INTO mcp_accounts(id,connection_id,kind,display_name,namespace) VALUES ('only','c','shared','Only','github_only')",
     )
-    const initial = await builtinConnection(pool)
     const server = await createGatewayServer(service, user)
     const client = new Client({ name: 'single-account-test', version: '1' })
     const [clientTransport, serverTransport] =
@@ -455,25 +373,9 @@ describe('GatewayService', () => {
         'only',
         'read_issue',
       ])
-      const before = calls.length
-      await setBuiltinToolPolicies(pool, initial.revision, [
-        { pattern: '*', effect: 'allow' },
-        { pattern: 'call_tool', effect: 'block' },
-      ])
-      expect(
-        (
-          await client.callTool({
-            name: read.name,
-            arguments: { arguments: {} },
-          })
-        ).isError,
-      ).toBe(true)
-      expect(calls.length).toBe(before)
     } finally {
       await client.close()
       await server.close()
-      const current = await builtinConnection(pool)
-      await setBuiltinToolPolicies(pool, current.revision, initial.policies)
       await pool.query("DELETE FROM mcp_accounts WHERE id='only'")
     }
   })

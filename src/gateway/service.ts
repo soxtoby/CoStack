@@ -1,7 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { evaluateToolPolicy, policyFromRow } from '../connections/policy'
 import { writeAudit } from './audit'
-import { builtinConnection } from './builtin-tools'
 import type { ConnectionManager } from '../connections/manager'
 import type { ToolPolicy } from '../connections/types'
 import type { GatewayPrincipal, GatewayTool, GatewayToolTarget } from './types'
@@ -17,9 +16,6 @@ export class GatewayError extends Error {
 }
 
 export class GatewayService {
-  async builtinToolPolicies() {
-    return (await builtinConnection(this.pool)).policies
-  }
   constructor(
     private pool: Pool,
     private connections: ConnectionManager,
@@ -53,9 +49,8 @@ export class GatewayService {
     }
   }
 
-  async search(
+  async accessibleTools(
     principal: GatewayPrincipal,
-    query = '',
   ): Promise<Array<GatewayTool>> {
     const result = await this.pool.query(
       `SELECT c.id connection_id, c.display_name connection_name, c.namespace connection_namespace,
@@ -90,7 +85,6 @@ export class GatewayService {
       item.policies.push(policyFromRow(row))
       grouped.set(key, item)
     }
-    const terms = query.toLowerCase().split(/\s+/).filter(Boolean)
     const tools = [...grouped.values()].flatMap(({ row, policies }) => {
       const policy = evaluateToolPolicy(
         policies,
@@ -138,25 +132,14 @@ export class GatewayService {
         } satisfies GatewayTool,
       ]
     })
-    if (!terms.length) return tools
-    const shortestPrefix = terms.length > 3 ? 2 : terms.length
-    for (let length = terms.length; length >= shortestPrefix; length--) {
-      const prefix = terms.slice(0, length)
-      const matches = tools.filter((tool) => {
-        const searchable =
-          `${tool.qualifiedName} ${tool.connectionName} ${tool.accountName ?? ''} ${tool.description ?? ''}`.toLowerCase()
-        return prefix.every((term) => searchable.includes(term))
-      })
-      if (matches.length) return matches
-    }
-    return []
+    return tools
   }
 
   async resolve(
     principal: GatewayPrincipal,
     target: string | GatewayToolTarget,
   ) {
-    const tools = await this.search(principal)
+    const tools = await this.accessibleTools(principal)
     const matches = tools.filter((tool) =>
       typeof target === 'string'
         ? tool.qualifiedName === target
@@ -200,7 +183,7 @@ export class GatewayService {
           path !== 'approved'
         )
           throw new GatewayError(
-            'Use call_tool_with_approval for this tool',
+            'Client approval is required',
             'client_approval_required',
           )
         if (

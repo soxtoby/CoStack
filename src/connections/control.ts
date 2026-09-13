@@ -1,8 +1,4 @@
 import { databasePool } from '../database/pool'
-import {
-  builtinConnectionId,
-  setBuiltinToolPolicies,
-} from '../gateway/builtin-tools'
 import { auth } from '../auth/auth'
 import { loadAuthorization, may } from '../auth/authorization'
 import { ConnectionManager, RevisionConflictError } from './manager'
@@ -62,10 +58,6 @@ export async function controlHandler(request: Request) {
     if (request.method === 'GET') return snapshot(request, url)
     const body = (await request.json()) as Record<string, unknown>
     const action = String(body.action ?? '')
-    if (body.connectionId === builtinConnectionId)
-      throw new Error(
-        'CoStack does not support Accounts or upstream configuration',
-      )
     if (action === 'set-approval-method')
       return setApprovalMethod(request, body)
     if (action === 'create-personal-account')
@@ -130,17 +122,6 @@ async function connectionAction(
   action: string,
   userId: string,
 ) {
-  if (body.id === builtinConnectionId) {
-    if (action !== 'set-tool-policies')
-      throw new Error('Only Tools can be configured for CoStack')
-    return Response.json(
-      await setBuiltinToolPolicies(
-        databasePool(),
-        Number(body.revision),
-        body.policies as Array<ToolPolicy>,
-      ),
-    )
-  }
   const service = await manager()
   if (action === 'set-tool-policies')
     return Response.json(

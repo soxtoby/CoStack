@@ -88,6 +88,9 @@ for (const [role, administrator, capabilities] of [
       )
       const data = await response.json()
       expect(
+        data.connections.map((connection: { id: string }) => connection.id),
+      ).toEqual(['connection'])
+      expect(
         data.detail.accounts
           .map((account: { id: string }) => account.id)
           .sort(),

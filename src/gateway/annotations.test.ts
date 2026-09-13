@@ -148,7 +148,7 @@ test('upstream annotations survive HTTP discovery, persistence, gateway listing 
       state: 'enabled',
     })
     const listed = await listTools()
-    const searched = await service.search(principal)
+    const searched = await service.accessibleTools(principal)
     for (const tool of upstreamTools) {
       expect(
         listed.find((candidate) => candidate.name === `fixture.${tool.name}`)
@@ -164,17 +164,6 @@ test('upstream annotations survive HTTP discovery, persistence, gateway listing 
         searched.find((candidate) => candidate.toolName === tool.name),
       ).toMatchObject(tool.annotations ? { annotations: tool.annotations } : {})
     }
-    expect(
-      listed.find((tool) => tool.name === 'search_tools')?.annotations,
-    ).toMatchObject({
-      readOnlyHint: true,
-      destructiveHint: false,
-      openWorldHint: false,
-    })
-    expect(
-      listed.find((tool) => tool.name === 'call_tool_with_approval')
-        ?.annotations?.destructiveHint,
-    ).toBe(true)
     const policies: Array<ToolPolicy> = [
       { pattern: '*', effect: 'block' },
       { annotation: 'read_only', effect: 'allow' },
@@ -212,7 +201,7 @@ test('upstream annotations survive HTTP discovery, persistence, gateway listing 
         .policy,
     ).toBe('require_approval')
     expect(
-      (await service.search(principal)).find(
+      (await service.accessibleTools(principal)).find(
         (tool) => tool.qualifiedName === 'fixture__append',
       ),
     ).toBeUndefined()
@@ -242,14 +231,6 @@ test('upstream annotations survive HTTP discovery, persistence, gateway listing 
           })
         ).isError,
       ).toBe(true)
-      expect(
-        (
-          await client.callTool({
-            name: 'call_tool',
-            arguments: { name: 'fixture__delete', arguments: {} },
-          })
-        ).isError,
-      ).toBe(true)
       expect(forwarded).toBe(1)
       await manager.setToolPolicies(connection.id, connection.revision + 1, [
         ...policies,
@@ -274,7 +255,7 @@ test('upstream annotations survive HTTP discovery, persistence, gateway listing 
       (await listTools()).find((tool) => tool.name === 'fixture.read'),
     ).not.toHaveProperty('annotations')
     expect(
-      (await service.search(principal)).find(
+      (await service.accessibleTools(principal)).find(
         (tool) => tool.qualifiedName === 'fixture__read',
       )?.policy,
     ).toBe('require_approval')

@@ -78,12 +78,7 @@ export async function serveMcpRequest(
   principal: GatewayPrincipal,
   clientId?: string,
 ) {
-  const server = await createGatewayServer(
-    service,
-    principal,
-    clientId,
-    await service.builtinToolPolicies(),
-  )
+  const server = await createGatewayServer(service, principal, clientId)
   const transport = new WebStandardStreamableHTTPServerTransport({
     enableJsonResponse: true,
   })

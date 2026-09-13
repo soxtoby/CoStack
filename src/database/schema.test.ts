@@ -45,6 +45,7 @@ describe('database schema', () => {
       { name: '0009_account_namespace_claims.sql' },
       { name: '0010_tool_annotations.sql' },
       { name: '0011_annotation_policies.sql' },
+      { name: '0012_remove_builtin_tools.sql' },
     ])
   })
 

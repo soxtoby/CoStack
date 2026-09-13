@@ -1,8 +1,4 @@
 import { may } from '../auth/authorization'
-import {
-  builtinConnection,
-  builtinConnectionId,
-} from '../gateway/builtin-tools'
 import { findBundledMcp } from './bundled-mcps'
 import { evaluateToolPolicy, policyFromRow } from './policy'
 import type { PrincipalAuthorization } from '../auth/authorization'
@@ -45,18 +41,14 @@ export async function connectionSnapshot(
     canAudit ? auditRows(pool, url) : Promise.resolve({ rows: [] }),
   ])
   const detailId = url.searchParams.get('connection')
-  const builtin = canConnections ? await builtinConnection(pool) : undefined
-  const detail =
-    detailId === builtinConnectionId
-      ? builtin
-      : detailId
-        ? await connectionDetail(
-            pool,
-            detailId,
-            authorization.id,
-            canConnections || canAccounts,
-          )
-        : undefined
+  const detail = detailId
+    ? await connectionDetail(
+        pool,
+        detailId,
+        authorization.id,
+        canConnections || canAccounts,
+      )
+    : undefined
   return Response.json({
     authorization: {
       administrator: authorization.administrator,
@@ -69,15 +61,14 @@ export async function connectionSnapshot(
       )
     ).rows[0]?.approval_method,
     organizationId,
-    connections: [
-      ...(builtin ? [builtin] : []),
-      ...connections.rows.map(({ transport_config, ...connection }) => ({
+    connections: connections.rows.map(
+      ({ transport_config, ...connection }) => ({
         ...connection,
         icon: findBundledMcp(
           scrubTransport(transport_config as TransportConfig),
         )?.icon,
-      })),
-    ],
+      }),
+    ),
     registrySources: sources.rows,
     auditRetentionDays: settings.rows[0]?.audit_retention_days ?? 90,
     audit: audit.rows,

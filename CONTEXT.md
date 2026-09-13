@@ -45,7 +45,7 @@ A named set of MCP Connection credentials owned by one User.
 _Avoid_: Personal credentials, user login
 
 **Account Namespace**:
-The immutable name used to select an Account and prefix its compatibility tool names. Shared namespaces are reserved organization-wide against both Shared and Personal Accounts; Personal namespaces are unique per User and may be reused by different Users.
+The immutable name used to select an Account when calling a directly exposed tool. Shared namespaces are reserved organization-wide against both Shared and Personal Accounts; Personal namespaces are unique per User and may be reused by different Users.
 _Avoid_: Slug, tool prefix
 
 **Gateway MCP**:

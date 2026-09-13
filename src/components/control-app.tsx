@@ -232,7 +232,6 @@ type ControlData = {
     healthy: boolean | null
     error: string | null
     account_count: number
-    builtin?: boolean
     icon?: string
     group_ids: Array<string>
   }>
@@ -245,7 +244,6 @@ type ControlData = {
   auditRetentionDays: number
   audit: Array<Record<string, string | number | null>>
   detail?: {
-    builtin?: boolean
     id: string
     display_name: string
     namespace: string
@@ -369,15 +367,13 @@ export function ConnectionSummary(p: {
       <McpIcon src={c.icon} name={c.display_name} />
       <span className="connection-identity">
         <b>{c.display_name}</b>
-        {c.builtin ? <small>Gateway MCP</small> : <code>{c.namespace}__*</code>}
+        <code>{c.namespace}__*</code>
       </span>
       <Status ok={c.state === 'enabled'}>
         {c.state === 'enabled' ? 'Enabled' : 'Disabled'}
       </Status>
       <span className="account-count">
-        {c.builtin
-          ? 'Built in'
-          : `${c.account_count} ${c.account_count === 1 ? 'Account' : 'Accounts'}`}
+        {c.account_count} {c.account_count === 1 ? 'Account' : 'Accounts'}
       </span>
     </button>
   )
@@ -560,20 +556,6 @@ function ConnectionDetail(p: {
   const bundled = findBundledMcp(d.transport_config)
   const [credentials, setCredentials] = useState<string>()
   const [addingAccount, setAddingAccount] = useState(false)
-  if (d.builtin)
-    return (
-      <header className="detail-head">
-        <h3>Tools</h3>
-        <Link
-          className="secondary"
-          to="/connections/$connectionId/configure"
-          params={{ connectionId: d.id }}
-          search={{ tab: 'tools' }}
-        >
-          Configure Tools
-        </Link>
-      </header>
-    )
   return (
     <>
       <header className="detail-head">
@@ -744,66 +726,54 @@ function EditConnectionForm(p: {
           p.done()
         }}
       >
-        {!d.builtin && (
-          <div
-            className="configuration-fields"
-            hidden={p.tab !== 'connection'}
-            onChange={() => {
-              setSettingsChanged(true)
-              p.changed()
-            }}
-          >
-            <Field label="Display name">
+        <div
+          className="configuration-fields"
+          hidden={p.tab !== 'connection'}
+          onChange={() => {
+            setSettingsChanged(true)
+            p.changed()
+          }}
+        >
+          <Field label="Display name">
+            <input name="displayName" defaultValue={d.display_name} required />
+          </Field>
+          {http ? (
+            <Field label="HTTPS URL">
               <input
-                name="displayName"
-                defaultValue={d.display_name}
+                name="url"
+                type="url"
+                defaultValue={String(transport.url ?? '')}
                 required
               />
             </Field>
-            {http ? (
-              <Field label="HTTPS URL">
-                <input
-                  name="url"
-                  type="url"
-                  defaultValue={String(transport.url ?? '')}
-                  required
-                />
-              </Field>
-            ) : (
-              <Field label="Launch command">
-                <input
-                  name="commandLine"
-                  defaultValue={formatStdioCommandLine(
-                    String(transport.command ?? ''),
-                    Array.isArray(transport.args)
-                      ? transport.args.map(String)
-                      : undefined,
-                  )}
-                  required
-                  spellCheck={false}
-                />
-                <small>CoStack runs this command whenever it connects.</small>
-              </Field>
-            )}
-            <GroupChecks
-              groups={p.groups}
-              selected={d.group_ids ?? []}
-              label="Group access"
-            />
-            <p>
-              Members of these Groups can create Personal Accounts and use this
-              connection. Choose a Group you belong to before signing in
-              personally.
-            </p>
-          </div>
-        )}
-        <div hidden={p.tab !== 'tools'}>
-          {d.builtin && (
-            <p>
-              These policies apply to everyone using the Gateway MCP. Require
-              approval needs a client that supports gateway approval prompts.
-            </p>
+          ) : (
+            <Field label="Launch command">
+              <input
+                name="commandLine"
+                defaultValue={formatStdioCommandLine(
+                  String(transport.command ?? ''),
+                  Array.isArray(transport.args)
+                    ? transport.args.map(String)
+                    : undefined,
+                )}
+                required
+                spellCheck={false}
+              />
+              <small>CoStack runs this command whenever it connects.</small>
+            </Field>
           )}
+          <GroupChecks
+            groups={p.groups}
+            selected={d.group_ids ?? []}
+            label="Group access"
+          />
+          <p>
+            Members of these Groups can create Personal Accounts and use this
+            connection. Choose a Group you belong to before signing in
+            personally.
+          </p>
+        </div>
+        <div hidden={p.tab !== 'tools'}>
           <ToolPolicyEditor
             policies={policies}
             tools={d.tools}
@@ -2395,7 +2365,6 @@ export function ConfigureConnectionPage({
   if (!control) return <p role="status">Loading connection…</p>
   const d = control.detail
   if (!d) return <p role="alert">Connection not found.</p>
-  if (d.builtin) tab = 'tools'
   const run = async (action: string, extra: Record<string, unknown> = {}) => {
     setBusy(true)
     setActionError('')
@@ -2422,23 +2391,20 @@ export function ConfigureConnectionPage({
               to="/connections"
               search={{ connection: connectionId }}
             >
-              <UiIcon name="arrowLeft" /> Back to{' '}
-              {d.builtin ? 'Connections' : 'Accounts'}
+              <UiIcon name="arrowLeft" /> Back to Accounts
             </Link>
           </>
         }
       />
       <div className="config-tabs" aria-label="Configuration sections">
-        {!d.builtin && (
-          <Link
-            to="/connections/$connectionId/configure"
-            params={{ connectionId }}
-            search={{ tab: 'connection' }}
-            aria-current={tab === 'connection' ? 'page' : undefined}
-          >
-            Connection config
-          </Link>
-        )}
+        <Link
+          to="/connections/$connectionId/configure"
+          params={{ connectionId }}
+          search={{ tab: 'connection' }}
+          aria-current={tab === 'connection' ? 'page' : undefined}
+        >
+          Connection config
+        </Link>
         <Link
           to="/connections/$connectionId/configure"
           params={{ connectionId }}
@@ -2459,8 +2425,7 @@ export function ConfigureConnectionPage({
             setDirty(true)
           }}
           actions={
-            !d.builtin &&
-            (tab === 'tools' ? (
+            tab === 'tools' ? (
               <button
                 type="button"
                 className="secondary"
@@ -2480,7 +2445,7 @@ export function ConfigureConnectionPage({
               >
                 {d.state === 'enabled' ? 'Disable' : 'Enable'}
               </button>
-            ))
+            )
           }
           key={`${d.id}:${d.revision}:${editRevision}`}
           detail={d}
