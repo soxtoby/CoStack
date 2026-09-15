@@ -24,6 +24,7 @@ import {
 } from '../connections/bundled-mcps'
 import { BundledMcpCards, BundledMcpSetup } from './bundled-mcps'
 import { McpIcon } from './mcp-icon'
+import { BrandIcon } from './brand-icon'
 import { UiIcon } from './ui-icon'
 import { responseError } from './response-error'
 import type { FormEvent, ReactNode } from 'react'
@@ -2092,7 +2093,7 @@ function PageBar(p: { title: string; actions?: ReactNode }) {
 function Logo() {
   return (
     <a className="logo" href="/">
-      <i>C</i>
+      <BrandIcon />
       <b>CoStack</b>
     </a>
   )

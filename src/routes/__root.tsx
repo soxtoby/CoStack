@@ -13,7 +13,10 @@ export const Route = createRootRoute({
         content: 'Manage MCP connections and access from one gateway.',
       },
     ],
-    links: [{ rel: 'stylesheet', href: appCss }],
+    links: [
+      { rel: 'stylesheet', href: appCss },
+      { rel: 'icon', type: 'image/svg+xml', href: '/icons/costack.svg' },
+    ],
   }),
   shellComponent: RootDocument,
 })

@@ -1,0 +1,408 @@
+<!doctype html>
+<!-- Throwaway icon study: four SVG marks, contextual previews, ?variant=A–D. -->
+<html lang="en">
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>CoStack — icon studies</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      margin: 0;
+      background: #f7f8fa;
+      color: #1a1d23;
+      font-family:
+        Segoe UI,
+        sans-serif;
+    }
+    main {
+      max-width: 1320px;
+      margin: auto;
+      padding: 42px 40px 110px;
+    }
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: end;
+      margin-bottom: 30px;
+    }
+    .eyebrow {
+      font:
+        11px Consolas,
+        monospace;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: #5c6673;
+    }
+    h1 {
+      font-size: 34px;
+      letter-spacing: -1.4px;
+      margin: 10px 0;
+      font-weight: 600;
+    }
+    header p {
+      color: #5c6673;
+      font-size: 13px;
+      max-width: 320px;
+      line-height: 1.6;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+    }
+    .card {
+      border: 1px solid #e2e6ec;
+      background: white;
+      border-radius: 8px;
+      overflow: hidden;
+      cursor: pointer;
+    }
+    .card.active {
+      outline: 2px solid #2563eb;
+      outline-offset: 3px;
+    }
+    .hero {
+      height: 185px;
+      display: grid;
+      place-items: center;
+      color: #2563eb;
+      background: #fff;
+    }
+    .hero svg {
+      width: 100px;
+      height: 100px;
+    }
+    svg {
+      display: block;
+      flex-shrink: 0;
+    }
+    .info {
+      padding: 18px;
+      border-top: 1px solid #eef2f8;
+    }
+    .info h2 {
+      font-size: 16px;
+      margin: 0 0 9px;
+    }
+    .info p {
+      font-size: 12px;
+      line-height: 1.6;
+      color: #5c6673;
+      min-height: 58px;
+      margin: 0;
+    }
+    .sizes {
+      display: flex;
+      align-items: end;
+      gap: 19px;
+      margin-top: 22px;
+    }
+    .size {
+      display: grid;
+      justify-items: center;
+      gap: 9px;
+    }
+    .size span {
+      font:
+        10px Consolas,
+        monospace;
+      color: #7a8490;
+    }
+    .inverse {
+      background: #101c33;
+      color: white;
+      display: flex;
+      justify-content: space-around;
+      align-items: center;
+      height: 78px;
+    }
+    .tile {
+      background: #2563eb;
+      padding: 8px;
+      border-radius: 9px;
+      color: white;
+    }
+    .detail {
+      margin-top: 32px;
+      display: grid;
+      grid-template-columns: 260px 1fr;
+      border: 1px solid #e2e6ec;
+      border-radius: 8px;
+      overflow: hidden;
+      background: white;
+    }
+    .sidebar {
+      background: #f7f8fa;
+      padding: 20px;
+      border-right: 1px solid #e2e6ec;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      font-size: 15px;
+      font-weight: 650;
+    }
+    .brand .tile {
+      padding: 3px;
+      border-radius: 6px;
+    }
+    .nav {
+      font-size: 13px;
+      color: #5c6673;
+      margin-top: 26px;
+      display: grid;
+      gap: 5px;
+    }
+    .nav div {
+      padding: 7px 10px;
+    }
+    .nav .selected {
+      background: #e8eefb;
+      color: #1d4ed8;
+      border-radius: 5px;
+    }
+    .context {
+      padding: 26px 32px;
+    }
+    .context h2 {
+      font-size: 22px;
+      margin: 10px 0;
+    }
+    .context p {
+      color: #5c6673;
+      line-height: 1.6;
+      font-size: 13px;
+      max-width: 660px;
+    }
+    .lockup {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      font-size: 32px;
+      letter-spacing: -1px;
+      font-weight: 600;
+      margin-top: 28px;
+      color: #2563eb;
+    }
+    .lockup span {
+      color: #1a1d23;
+    }
+    button,
+    a {
+      font: inherit;
+    }
+    button {
+      cursor: pointer;
+    }
+    .controls {
+      position: fixed;
+      bottom: 22px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      padding: 9px;
+      background: #101c33;
+      color: white;
+      border-radius: 12px;
+      box-shadow: 0 8px 30px #101c3333;
+      font-size: 13px;
+    }
+    .controls button {
+      border: 0;
+      background: #ffffff18;
+      color: white;
+      padding: 10px 15px;
+      border-radius: 6px;
+    }
+    .controls span {
+      min-width: 135px;
+      text-align: center;
+    }
+    a {
+      color: #1d4ed8;
+      font-size: 12px;
+    }
+    button:focus-visible,
+    .card:focus-visible {
+      outline: 3px solid #2563eb;
+      outline-offset: 4px;
+    }
+    @media (max-width: 900px) {
+      .grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+      main {
+        padding: 25px 20px 110px;
+      }
+    }
+    @media (max-width: 540px) {
+      .grid {
+        grid-template-columns: 1fr;
+      }
+      header {
+        display: block;
+      }
+      .detail {
+        grid-template-columns: 1fr;
+      }
+      .sidebar {
+        border-right: 0;
+        border-bottom: 1px solid #e2e6ec;
+      }
+    }
+  </style>
+  <main>
+    <header>
+      <div>
+        <div class="eyebrow">CoStack / identity study / 03</div>
+        <h1>A stack with character.</h1>
+      </div>
+      <p>
+        Balanced B, plus two restrained tilts using the same C silhouette.
+        Original A stays here for comparison.
+      </p>
+    </header>
+    <div class="grid" id="grid"></div>
+    <section class="detail">
+      <aside class="sidebar">
+        <div class="brand" id="brand"></div>
+        <div class="nav">
+          <div class="selected">Connections</div>
+          <div>Registry Sources</div>
+          <div>Users</div>
+          <div>Groups</div>
+          <div>Service Accounts</div>
+          <div>Settings</div>
+        </div>
+      </aside>
+      <div class="context">
+        <div class="eyebrow">Selected direction / sidebar + wordmark</div>
+        <h2 id="title"></h2>
+        <p id="description"></p>
+        <div class="lockup" id="lockup"></div>
+        <p><a id="download" download>Download SVG</a></p>
+      </div>
+    </section>
+  </main>
+  <div class="controls">
+    <button id="prev" aria-label="Previous direction">←</button
+    ><span id="current"></span
+    ><button id="next" aria-label="Next direction">→</button>
+  </div>
+  <script>
+    const concepts = [
+      {
+        key: 'A',
+        name: 'Original A',
+        short:
+          'The original for comparison. Long top and bottom bars frame three shorter layers.',
+        detail:
+          'Original proportions: 44 / 23 / 17 / 23 / 44. The C reads strongly, but the outer bars carry much more visual weight.',
+        path: '<path d="M10 8h44v7H10zM6 18h23v7H6zM6 28h17v7H6zM6 38h23v7H6zM10 48h44v7H10z"/>',
+      },
+      {
+        key: 'B',
+        name: 'Balanced layers',
+        short:
+          'Shorter outer bars, longer inner bars. Keeps the C while distributing the weight.',
+        detail:
+          'Lengths: 38 / 30 / 26 / 30 / 38. My pick for the refinement: enough indentation to retain the C, with much less emphasis on the top and bottom.',
+        path: '<path d="M12 8h38v7H12zM8 18h30v7H8zM8 28h26v7H8zM8 38h30v7H8zM12 48h38v7H12z"/>',
+      },
+      {
+        key: 'C',
+        name: 'Gentle tilt',
+        short:
+          'B with a small progressive tilt. The layers stay centred on the C.',
+        detail:
+          'Same lengths and positions as B. Rotations descend from 6° at the top to 0° at the base, with no sideways drift. A little movement while keeping the open C shape.',
+        path: '<g><path d="M12 8h38v7H12z" transform="rotate(6 31 11.5)"/><path d="M8 18h30v7H8z" transform="rotate(4.5 23 21.5)"/><path d="M8 28h26v7H8z" transform="rotate(3 21 31.5)"/><path d="M8 38h30v7H8z" transform="rotate(1.5 23 41.5)"/><path d="M12 48h38v7H12z"/></g>',
+      },
+      {
+        key: 'D',
+        name: 'Measured tilt',
+        short:
+          'A more visible lean, with the top and bottom still defining the C.',
+        detail:
+          'Same lengths and positions as B, with rotations of 10°, 7.5°, 5°, 2.5°, and 0°. Less than half the previous tilt, and no sideways drift. Compare with C to judge how much movement earns its place.',
+        path: '<g><path d="M12 8h38v7H12z" transform="rotate(10 31 11.5)"/><path d="M8 18h30v7H8z" transform="rotate(7.5 23 21.5)"/><path d="M8 28h26v7H8z" transform="rotate(5 21 31.5)"/><path d="M8 38h30v7H8z" transform="rotate(2.5 23 41.5)"/><path d="M12 48h38v7H12z"/></g>',
+      },
+    ]
+    function svg(c, size = 32) {
+      return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="${size}" height="${size}" fill="currentColor" aria-hidden="true">${c.path}</svg>`
+    }
+    const grid = document.querySelector('#grid')
+    grid.innerHTML = concepts
+      .map(
+        (c) =>
+          `<article class="card" tabindex="0" role="button" aria-label="Select ${c.name}" data-key="${c.key}"><div class="hero">${svg(c, 100)}</div><div class="info"><h2>${c.key} / ${c.name}</h2><p>${c.short}</p><div class="sizes">${[16, 24, 32, 48].map((s) => `<div class="size">${svg(c, s)}<span>${s}px</span></div>`).join('')}</div></div><div class="inverse">${svg(c, 32)}<div class="tile">${svg(c, 32)}</div></div></article>`,
+      )
+      .join('')
+    let selected = 0
+    let blob
+    function show(index) {
+      selected = (index + 4) % 4
+      const c = concepts[selected]
+      const url = new URL(location)
+      url.searchParams.set('variant', c.key)
+      history.replaceState(null, '', url)
+      document.querySelectorAll('.card').forEach((el) => {
+        el.classList.toggle('active', el.dataset.key === c.key)
+        el.setAttribute('aria-pressed', String(el.dataset.key === c.key))
+      })
+      document.querySelector('#title').textContent = c.name
+      document.querySelector('#description').textContent = c.detail
+      document.querySelector('#current').textContent = c.key + ' / ' + c.name
+      document.querySelector('#brand').innerHTML =
+        `<div class="tile">${svg(c, 18)}</div>CoStack`
+      document.querySelector('#lockup').innerHTML =
+        svg(c, 52) + '<span>CoStack</span>'
+      if (blob) URL.revokeObjectURL(blob)
+      blob = URL.createObjectURL(
+        new Blob(
+          [
+            svg(c, 64).replace(
+              'aria-hidden="true"',
+              'role="img" aria-label="CoStack"',
+            ),
+          ],
+          { type: 'image/svg+xml' },
+        ),
+      )
+      const a = document.querySelector('#download')
+      a.href = blob
+      a.download =
+        'costack-' + c.name.toLowerCase().replaceAll(' ', '-') + '.svg'
+    }
+    grid.addEventListener('click', (e) => {
+      const card = e.target.closest('.card')
+      if (card) show(concepts.findIndex((c) => c.key === card.dataset.key))
+    })
+    grid.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault()
+        e.target.closest('.card')?.click()
+      }
+    })
+    document.querySelector('#prev').onclick = () => show(selected - 1)
+    document.querySelector('#next').onclick = () => show(selected + 1)
+    document.addEventListener('keydown', (e) => {
+      if (e.target.matches('input,textarea,[contenteditable]')) return
+      if (e.key === 'ArrowLeft') show(selected - 1)
+      if (e.key === 'ArrowRight') show(selected + 1)
+    })
+    show(
+      Math.max(
+        0,
+        concepts.findIndex(
+          (c) => c.key === new URLSearchParams(location.search).get('variant'),
+        ),
+      ),
+    )
+  </script>
+</html>

@@ -1,6 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { useEffect, useState } from 'react'
 import { UiIcon } from '../../components/ui-icon'
+import { BrandIcon } from '../../components/brand-icon'
 
 export const Route = createFileRoute('/oauth/consent')({ component: Consent })
 function Consent() {
@@ -31,7 +32,7 @@ function Consent() {
     <main className="consent">
       <section>
         <div className="logo">
-          <i>C</i>
+          <BrandIcon />
           <b>CoStack</b>
         </div>
         <code>MCP AUTHORIZATION</code>
