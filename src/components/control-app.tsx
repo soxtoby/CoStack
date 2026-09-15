@@ -837,6 +837,7 @@ function AccountForm(p: {
     p.account?.kind ?? 'personal',
   )
   const [manual, setManual] = useState(!p.oauth)
+  const [environment, setEnvironment] = useState([{ name: '', value: '' }])
   const [createdId, setCreatedId] = useState<string>()
   return (
     <Form
@@ -851,8 +852,20 @@ function AccountForm(p: {
       cancel={p.cancel}
       disabled={!p.account && kind === 'personal' && !p.personalEligible}
       go={async (f) => {
+        const variables = environment
+          .map((row) => ({ ...row, name: row.name.trim() }))
+          .filter((row) => row.name || row.value)
+        if (manual && !p.oauth) {
+          const names = variables.map((row) => row.name)
+          if (names.some((name) => !name))
+            throw Error('Environment variable names must not be blank')
+          if (new Set(names).size !== names.length)
+            throw Error('Environment variable names must be unique')
+        }
         const secrets = manual
-          ? JSON.parse(String(f.get('secrets') || '{}'))
+          ? p.oauth
+            ? JSON.parse(String(f.get('secrets') || '{}'))
+            : Object.fromEntries(variables.map((row) => [row.name, row.value]))
           : undefined
         const account =
           p.account ??
@@ -928,14 +941,79 @@ function AccountForm(p: {
           </label>
         </>
       )}
-      {manual && (
-        <Field label="Credential fields as JSON">
+      {manual && p.oauth && (
+        <Field label="HTTP headers as JSON">
           <textarea
             name="secrets"
             defaultValue={p.bundled?.manualCredentials ?? '{}'}
             spellCheck={false}
           />
         </Field>
+      )}
+      {manual && !p.oauth && (
+        <div className="environment-fields">
+          <strong>Environment variables</strong>
+          <p className="note">
+            Passed to the server process. Values are stored encrypted.
+            {p.account && ' Saving replaces all existing account variables.'}
+          </p>
+          {environment.map((row, index) => (
+            <div className="environment-row" key={index}>
+              <Field label="Name">
+                <input
+                  aria-label={`Environment variable ${index + 1} name`}
+                  placeholder="API_KEY"
+                  value={row.name}
+                  required={!!row.value}
+                  pattern="[^=\u0000]+"
+                  autoComplete="off"
+                  spellCheck={false}
+                  onChange={(e) =>
+                    setEnvironment(
+                      environment.map((item, i) =>
+                        i === index ? { ...item, name: e.target.value } : item,
+                      ),
+                    )
+                  }
+                />
+              </Field>
+              <Field label="Value">
+                <input
+                  aria-label={`Environment variable ${index + 1} value`}
+                  type="password"
+                  autoComplete="new-password"
+                  value={row.value}
+                  onChange={(e) =>
+                    setEnvironment(
+                      environment.map((item, i) =>
+                        i === index ? { ...item, value: e.target.value } : item,
+                      ),
+                    )
+                  }
+                />
+              </Field>
+              <button
+                type="button"
+                className="secondary environment-remove"
+                aria-label={`Remove environment variable ${index + 1}`}
+                onClick={() =>
+                  setEnvironment(environment.filter((_, i) => i !== index))
+                }
+              >
+                <UiIcon name="close" />
+              </button>
+            </div>
+          ))}
+          <button
+            type="button"
+            className="secondary"
+            onClick={() =>
+              setEnvironment([...environment, { name: '', value: '' }])
+            }
+          >
+            Add variable
+          </button>
+        </div>
       )}
     </Form>
   )
@@ -2214,7 +2292,7 @@ function Modal(p: { title: string; close: () => void; children: ReactNode }) {
         <h2>{p.title}</h2>
         <button
           aria-label="Close"
-          className="close-connection"
+          className="secondary close-connection"
           onClick={p.close}
         >
           <UiIcon name="close" />

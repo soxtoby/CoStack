@@ -1740,3 +1740,39 @@ fieldset {
     animation: none !important;
   }
 }
+.environment-fields {
+  flex: 1 0 100%;
+  min-width: 0;
+  display: grid;
+  gap: 10px;
+}
+.environment-fields > .note {
+  margin: 0;
+}
+.environment-fields > button {
+  justify-self: start;
+}
+.environment-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 32px;
+  align-items: start;
+  gap: 8px;
+}
+.environment-row > label {
+  min-width: 0;
+}
+.environment-row input {
+  height: 32px;
+}
+.environment-row + .environment-row > .field > span {
+  display: none;
+}
+.environment-row + .environment-row > .environment-remove {
+  margin-top: 0;
+}
+.environment-remove {
+  margin-top: 22px;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+}
