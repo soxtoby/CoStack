@@ -6,7 +6,6 @@ import type { Pool } from 'pg'
 interface BootstrapInput {
   token: string
   organizationName: string
-  administratorName: string
   administratorEmail: string
   administratorPassword: string
 }
@@ -38,7 +37,7 @@ export async function bootstrap(
     throw new Error('Bootstrap has already completed')
 
   const credentials = {
-    name: input.administratorName,
+    name: 'Recovery Administrator',
     email: input.administratorEmail,
     password: input.administratorPassword,
   }

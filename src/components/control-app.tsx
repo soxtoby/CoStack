@@ -321,6 +321,9 @@ export function Connections({ data }: { data: Data }) {
       }
     >
       <div className="connection-list">
+        {control.connections.length === 0 && (
+          <ConnectionsEmptyState canAdd={Boolean(canConnections)} />
+        )}
         {control.connections.map((connection) => {
           const expanded = selected === connection.id
           return (
@@ -346,6 +349,19 @@ export function Connections({ data }: { data: Data }) {
         })}
       </div>
     </Page>
+  )
+}
+
+export function ConnectionsEmptyState({ canAdd }: { canAdd: boolean }) {
+  return (
+    <div className="connection-empty">
+      <b>No MCP connections yet</b>
+      <span>
+        {canAdd
+          ? 'Choose Add connection to get started.'
+          : 'Ask an administrator to add a connection.'}
+      </span>
+    </div>
   )
 }
 
@@ -1915,9 +1931,6 @@ function Bootstrap({ done }: { done: () => void }) {
         </Field>
         <Field label="Organization">
           <input name="organizationName" required />
-        </Field>
-        <Field label="Administrator name">
-          <input name="administratorName" required />
         </Field>
         <Field label="Administrator email">
           <input name="administratorEmail" type="email" required />

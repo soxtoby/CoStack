@@ -1,12 +1,12 @@
-FROM oven/bun:1.3.6 AS build
+FROM oven/bun:1.4.0 AS build
 WORKDIR /app
 COPY package.json bun.lock ./
 RUN bun install --frozen-lockfile
 COPY . .
 RUN bun run build
 
-FROM mcr.microsoft.com/dotnet/sdk:10.0.102-bookworm-slim AS runtime
-COPY --from=oven/bun:1.3.6 /usr/local/bin/bun /usr/local/bin/bun
+FROM mcr.microsoft.com/dotnet/sdk:10.0.102-noble AS runtime
+COPY --from=oven/bun:1.4.0 /usr/local/bin/bun /usr/local/bin/bun
 WORKDIR /app
 ENV NODE_ENV=production \
     HOST=0.0.0.0 \

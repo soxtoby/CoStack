@@ -826,6 +826,22 @@ fieldset {
   background: var(--surface);
   overflow: hidden;
 }
+.connection-empty {
+  min-height: 120px;
+  display: grid;
+  place-content: center;
+  gap: 4px;
+  padding: 24px;
+  text-align: center;
+  color: var(--text-muted);
+}
+.connection-empty b {
+  color: var(--text);
+  font-size: 13.5px;
+}
+.connection-empty span {
+  font-size: 12.5px;
+}
 .connection-list > article {
   border-bottom: 1px solid var(--line);
 }

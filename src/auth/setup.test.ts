@@ -12,6 +12,7 @@ describe('bootstrap', () => {
   test('creates the Better Auth user before opening the application transaction', async () => {
     process.env.BOOTSTRAP_TOKEN = 'bootstrap-token'
     const events: Array<string> = []
+    let signUpName = ''
     const result = (rows: Array<unknown> = []) =>
       ({ rows, rowCount: rows.length }) as QueryResult
     const client = {
@@ -32,18 +33,18 @@ describe('bootstrap', () => {
       {
         token: 'bootstrap-token',
         organizationName: 'Example',
-        administratorName: 'Admin',
         administratorEmail: 'admin@example.test',
         administratorPassword: 'password',
       },
       {
         pool,
-        signUp: () => {
+        signUp: (input) => {
           events.push('SIGN UP')
+          signUpName = input.name
           return Promise.resolve({
             user: {
               id: 'user-id',
-              name: 'Admin',
+              name: input.name,
               email: 'admin@example.test',
             },
           })
@@ -52,5 +53,6 @@ describe('bootstrap', () => {
     )
 
     expect(events.indexOf('SIGN UP')).toBeLessThan(events.indexOf('BEGIN'))
+    expect(signUpName).toBe('Recovery Administrator')
   })
 })

@@ -1,7 +1,20 @@
 import { expect, test } from 'bun:test'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { bundledMcps, bundledPrefill } from '../connections/bundled-mcps'
-import { ConnectionForm, ConnectionSummary } from './control-app'
+import {
+  ConnectionForm,
+  ConnectionSummary,
+  ConnectionsEmptyState,
+} from './control-app'
+
+test('empty connections explain the available next step', () => {
+  expect(
+    renderToStaticMarkup(<ConnectionsEmptyState canAdd={true} />),
+  ).toContain('Choose Add connection to get started.')
+  expect(
+    renderToStaticMarkup(<ConnectionsEmptyState canAdd={false} />),
+  ).toContain('Ask an administrator to add a connection.')
+})
 
 test('collapsed connection summary shows its visible Account count', () => {
   const html = renderToStaticMarkup(
