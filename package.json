@@ -14,8 +14,9 @@
     "check": "bun run typecheck && bun run lint && prettier --check . && bun test"
   },
   "dependencies": {
-    "@better-auth/core": "1.7.2",
+    "@azure/identity": "^4.13.3",
     "@better-auth/cimd": "1.7.2",
+    "@better-auth/core": "1.7.2",
     "@better-auth/mcp": "1.7.2",
     "@better-auth/sso": "1.7.2",
     "@electric-sql/pglite": "^0.5.8",
@@ -25,6 +26,7 @@
     "@tanstack/react-start": "1.168.49",
     "better-auth": "1.7.2",
     "pg": "^8.23.0",
+    "pg-connection-string": "^2.14.0",
     "react": "19.2.0",
     "react-dom": "19.2.0"
   },

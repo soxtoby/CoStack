@@ -32,6 +32,20 @@ docker run --rm -p 3000:3000 --env-file .env costack
 
 The image pins Bun and the .NET SDK, runs as a non-root user, and supports exact-version Bun/npm and .NET STDIO MCP commands. `/health` is a process health check. Container termination stops accepting requests, closes upstream MCP clients, then closes PostgreSQL. The image is suitable for Azure Container Apps; Azure resource definitions are outside this repository.
 
+### Entra-only PostgreSQL
+
+Enable a managed identity on the Container App and have a PostgreSQL Entra administrator create a database role for that identity. Grant it `CONNECT` on the application database and `USAGE, CREATE` on its `public` schema so startup migrations can create and update the application's tables. Do not grant the application server administrator privileges.
+
+Set `DATABASE_AUTHENTICATION=azure-managed-identity` and a passwordless URL:
+
+```text
+DATABASE_URL=postgresql://<database-role>@<server>.postgres.database.azure.com:5432/costack?sslmode=verify-full
+```
+
+URL-encode the role name if needed. System-assigned identity is the default; set `DATABASE_IDENTITY_CLIENT_ID` to select a user-assigned identity. Each new physical database connection requests a token through Azure Identity, allowing expired tokens to refresh without restarting the app. This mode requires verified TLS and rejects passwords in the URL. Keep private DNS linked to the app's VNet and allow access to PostgreSQL on port 5432.
+
+The default `DATABASE_AUTHENTICATION=password` retains the existing connection-string behavior, including local PGlite development. Entra database authentication is independent of the application's OIDC user sign-in configuration.
+
 For ChatGPT, use the gateway's Client ID Metadata Document flow. For Claude, create a predefined OAuth client and enter its client ID and secret in Claude. Both connect to `${APPLICATION_URL}/mcp` and require a publicly reachable HTTPS deployment.
 
 ## Bundled MCPs
