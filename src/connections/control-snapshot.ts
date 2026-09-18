@@ -2,7 +2,7 @@ import { may } from '../auth/authorization'
 import { findBundledMcp } from './bundled-mcps'
 import { evaluateToolPolicy, policyFromRow } from './policy'
 import type { PrincipalAuthorization } from '../auth/authorization'
-import type { TransportConfig } from './types'
+import type { OAuthClientSummary, TransportConfig } from './types'
 import type { Pool } from 'pg'
 
 export async function connectionSnapshot(
@@ -10,6 +10,7 @@ export async function connectionSnapshot(
   authorization: PrincipalAuthorization,
   url: URL,
   auditRows: (pool: Pool, url: URL) => Promise<{ rows: Array<unknown> }>,
+  oauthConfiguration?: (id: string) => Promise<OAuthClientSummary | undefined>,
 ) {
   const canConnections = may(authorization, 'manage_connections')
   const canAccounts = may(authorization, 'manage_accounts')
@@ -47,6 +48,7 @@ export async function connectionSnapshot(
         detailId,
         authorization.id,
         canConnections || canAccounts,
+        canAccounts ? oauthConfiguration : undefined,
       )
     : undefined
   return Response.json({
@@ -81,6 +83,7 @@ async function connectionDetail(
   id: string,
   userId: string,
   canViewAll: boolean,
+  oauthConfiguration?: (id: string) => Promise<OAuthClientSummary | undefined>,
 ) {
   const [connection, policies, tools, accounts] = await Promise.all([
     pool.query(
@@ -115,6 +118,9 @@ async function connectionDetail(
   return {
     ...row,
     transport_config: transport,
+    oauth_application: row.has_oauth
+      ? await oauthConfiguration?.(id)
+      : undefined,
     policies: policies.rows.map(policyFromRow),
     tools: tools.rows.map((tool) => ({
       ...tool,

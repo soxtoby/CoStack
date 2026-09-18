@@ -11,7 +11,7 @@ import type {
 } from '@modelcontextprotocol/sdk/shared/auth.js'
 import type { Pool } from 'pg'
 import type { SecretEnvelope, SecretVault } from './secrets'
-import type { OAuthClientConfig } from './types'
+import type { OAuthClientConfig, OAuthClientSummary } from './types'
 
 const FLOW_LIFETIME_MS = 10 * 60 * 1000
 
@@ -33,6 +33,12 @@ export class UpstreamOAuth {
     connectionId: string,
     config: OAuthClientConfig | undefined,
   ) {
+    if (config && !config.clientSecret) {
+      const existing = await this.connectionClient(connectionId)
+      if (existing?.clientSecret && existing.clientId !== config.clientId)
+        throw new Error('Enter a new client secret when changing Client ID')
+      config = { ...config, clientSecret: existing?.clientSecret ?? '' }
+    }
     const envelope = config
       ? await this.vault.seal(toStrings(config))
       : undefined
@@ -48,6 +54,32 @@ export class UpstreamOAuth {
       ],
     )
     if (result.rowCount !== 1) throw new Error('Connection not found')
+  }
+
+  async configuration(
+    connectionId: string,
+  ): Promise<OAuthClientSummary | undefined> {
+    const client = await this.connectionClient(connectionId)
+    return client
+      ? {
+          clientId: client.clientId,
+          ...(client.scope ? { scope: client.scope } : {}),
+          hasSecret: !!client.clientSecret,
+        }
+      : undefined
+  }
+
+  private async connectionClient(connectionId: string) {
+    const result = await this.pool.query(
+      `SELECT oauth_client_ciphertext, oauth_client_nonce, oauth_client_format_version
+       FROM mcp_connections WHERE id=$1`,
+      [connectionId],
+    )
+    const row = result.rows[0]
+    if (!row) throw new Error('Connection not found')
+    return row.oauth_client_ciphertext
+      ? ((await this.vault.open(envelopeFrom(row))) as OAuthClientConfig)
+      : undefined
   }
 
   async start(accountId: string, principalId: string) {

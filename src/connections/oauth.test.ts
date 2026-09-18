@@ -124,6 +124,60 @@ afterAll(async () => {
 })
 
 describe('upstream OAuth', () => {
+  test('returns safe application settings and preserves an unchanged secret', async () => {
+    const connection = await manager.create({
+      organizationId: 'org',
+      displayName: 'Saved OAuth settings',
+      transport: { kind: 'streamable_http', url: `${oauthBase}mcp` },
+      groupIds: [],
+      policies: [],
+      state: 'disabled',
+    })
+    const oauth = new UpstreamOAuth(pool, vault, 'http://gateway.test')
+    await oauth.configureConnection(connection.id, {
+      clientId: 'saved-client',
+      clientSecret: 'original-secret',
+      scope: 'read',
+    })
+    await oauth.configureConnection(connection.id, {
+      clientId: 'saved-client',
+      clientSecret: '',
+      scope: 'read write',
+    })
+    expect(await oauth.configuration(connection.id)).toEqual({
+      clientId: 'saved-client',
+      scope: 'read write',
+      hasSecret: true,
+    })
+    const account = await manager.addAccount({
+      connectionId: connection.id,
+      kind: 'personal',
+      ownerUserId: 'user',
+      displayName: 'Saved settings',
+    })
+    expect(
+      await (await oauth.provider(account.id)).clientInformation(),
+    ).toEqual({ client_id: 'saved-client', client_secret: 'original-secret' })
+    await expect(
+      oauth.configureConnection(connection.id, {
+        clientId: 'different-client',
+        clientSecret: '',
+      }),
+    ).rejects.toThrow('Enter a new client secret')
+    await oauth.configureConnection(connection.id, {
+      clientId: 'saved-client',
+      clientSecret: 'replacement-secret',
+    })
+    expect(
+      await (await oauth.provider(account.id)).clientInformation(),
+    ).toEqual({
+      client_id: 'saved-client',
+      client_secret: 'replacement-secret',
+    })
+    await oauth.configureConnection(connection.id, undefined)
+    expect(await oauth.configuration(connection.id)).toBeUndefined()
+  })
+
   test('registers automatically without a configured client and keeps registration scoped to the Account', async () => {
     const connection = await manager.create({
       organizationId: 'org',

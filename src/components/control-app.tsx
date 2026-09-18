@@ -30,7 +30,11 @@ import { responseError } from './response-error'
 import type { FormEvent, ReactNode } from 'react'
 import type { ToolAnnotations } from '@modelcontextprotocol/sdk/types.js'
 import type { BundledMcp } from '../connections/bundled-mcps'
-import type { ConnectionInput, ToolPolicy } from '../connections/types'
+import type {
+  ConnectionInput,
+  OAuthClientSummary,
+  ToolPolicy,
+} from '../connections/types'
 import type { RegistryServer } from '../connections/registry'
 import type { AccessDeniedReason } from '../auth/access-denied'
 
@@ -255,6 +259,7 @@ type ControlData = {
     group_ids?: Array<string>
     personal_account_eligible: boolean
     has_oauth: boolean
+    oauth_application?: OAuthClientSummary
     registry_source_id?: string | null
     registry_server_id?: string | null
     registry_version?: string | null
@@ -809,32 +814,74 @@ function EditConnectionForm(p: {
   )
 }
 
-function OAuthClientForm(p: { connectionId: string; done: () => void }) {
+function OAuthClientForm(p: {
+  connectionId: string
+  configuration?: OAuthClientSummary | undefined
+  done: () => void
+}) {
+  const [saved, setSaved] = useState(false)
+  const [secret, setSecret] = useState<string | null>(null)
+  const hasSecret = p.configuration?.hasSecret || saved
   return (
     <Form
       compact
+      className="oauth-client-form"
       title="Upstream OAuth application"
       submit="Save OAuth application"
+      resetOnSuccess={false}
       go={async (f) => {
         await controlAct('configure-upstream-oauth', {
           connectionId: p.connectionId,
           config: {
             clientId: String(f.get('clientId')),
-            clientSecret: String(f.get('clientSecret')),
+            clientSecret: secret ?? '',
             scope: String(f.get('scope') || '') || undefined,
           },
         })
+        setSecret(null)
+        setSaved(true)
         p.done()
       }}
     >
+      <p role="status">
+        {saved
+          ? 'OAuth application saved.'
+          : p.configuration
+            ? 'OAuth application configured.'
+            : 'No OAuth application configured yet.'}
+        {hasSecret && ' Enter a new secret only to replace the saved value.'}
+      </p>
       <Field label="Client ID">
-        <input name="clientId" required />
+        <input
+          name="clientId"
+          required
+          defaultValue={p.configuration?.clientId}
+          onChange={() => setSaved(false)}
+        />
       </Field>
       <Field label="Client secret">
-        <input name="clientSecret" type="password" required />
+        <input
+          name="clientSecret"
+          type="password"
+          required={!hasSecret}
+          value={secret ?? (hasSecret ? '********' : '')}
+          onChange={(e) => {
+            setSecret(e.target.value)
+            setSaved(false)
+          }}
+          onFocus={(e) => {
+            if (secret === null) e.target.select()
+          }}
+          autoComplete="new-password"
+        />
       </Field>
       <Field label="Scopes">
-        <input name="scope" placeholder="openid profile" />
+        <input
+          name="scope"
+          placeholder="openid profile"
+          defaultValue={p.configuration?.scope}
+          onChange={() => setSaved(false)}
+        />
       </Field>
     </Form>
   )
@@ -2558,7 +2605,12 @@ export function ConfigureConnectionPage({
           d.transport === 'streamable_http' && (
             <details className="registry-sources">
               <summary>Advanced OAuth application</summary>
-              <OAuthClientForm connectionId={d.id} done={reload} />
+              <OAuthClientForm
+                key={d.id}
+                connectionId={d.id}
+                configuration={d.oauth_application}
+                done={reload}
+              />
             </details>
           )}
       </div>

@@ -114,7 +114,13 @@ export async function upstreamOAuthRequestHandler(request: Request) {
 async function snapshot(request: Request, url: URL) {
   const actor = await principal(request)
   await ensureOfficialRegistrySource()
-  return connectionSnapshot(databasePool(), actor.authorization, url, auditRows)
+  return connectionSnapshot(
+    databasePool(),
+    actor.authorization,
+    url,
+    auditRows,
+    async (id) => (await manager()).oauth.configuration(id),
+  )
 }
 
 async function connectionAction(

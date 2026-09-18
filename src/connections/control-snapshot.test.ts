@@ -73,6 +73,50 @@ for (const [role, administrator, capabilities] of [
   ['connection manager', false, ['manage_connections']],
   ['administrator', true, []],
 ] as const) {
+  test(
+    role + ' receives OAuth metadata only with account management access',
+    async () => {
+      await pool.query(
+        "UPDATE mcp_connections SET oauth_client_ciphertext=$1, oauth_client_nonce=$1, oauth_client_format_version=1 WHERE id='connection'",
+        [new Uint8Array([1])],
+      )
+      let reads = 0
+      try {
+        const response = await connectionSnapshot(
+          pool,
+          {
+            id: 'other-user',
+            disabled: false,
+            administrator,
+            capabilities: new Set<Capability>(capabilities),
+          },
+          new URL('http://localhost/api/control?connection=connection'),
+          () => Promise.resolve({ rows: [] }),
+          () => {
+            reads++
+            return Promise.resolve({
+              clientId: 'saved-client',
+              scope: 'read',
+              hasSecret: true,
+            })
+          },
+        )
+        const data = await response.json()
+        const allowed = administrator || role === 'account manager'
+        expect(reads).toBe(allowed ? 1 : 0)
+        expect(data.detail.oauth_application).toEqual(
+          allowed
+            ? { clientId: 'saved-client', scope: 'read', hasSecret: true }
+            : undefined,
+        )
+        expect(JSON.stringify(data)).not.toContain('oauth_client_ciphertext')
+      } finally {
+        await pool.query(
+          "UPDATE mcp_connections SET oauth_client_ciphertext=null, oauth_client_nonce=null, oauth_client_format_version=null WHERE id='connection'",
+        )
+      }
+    },
+  )
   test(role + ' sees only shared and their own personal accounts', async () => {
     for (const id of ['other-user', 'recovery-admin']) {
       const response = await connectionSnapshot(

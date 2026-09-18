@@ -22,6 +22,12 @@ export type OAuthClientConfig = {
   scope?: string
 }
 
+export type OAuthClientSummary = {
+  clientId: string
+  scope?: string
+  hasSecret: boolean
+}
+
 export type TransportConfig = StdioConfig | HttpConfig
 export type ToolPolicyAnnotation = 'read_only' | 'destructive' | 'open_world'
 export type ToolPolicy = { effect: ToolPolicyEffect } & (

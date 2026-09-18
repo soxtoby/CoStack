@@ -437,6 +437,18 @@ aside footer button svg {
 .sso-form > button {
   justify-self: start;
 }
+/* Password managers inject zero-height controls after inputs. Block layout
+   avoids treating those controls as extra grid rows with an extra gap. */
+.oauth-client-form .field {
+  display: block;
+}
+.oauth-client-form .field > span {
+  display: block;
+  margin-bottom: 4px;
+}
+.oauth-client-form .field input {
+  display: block;
+}
 .action-form > fieldset,
 .action-form > p,
 .action-form > .error,
