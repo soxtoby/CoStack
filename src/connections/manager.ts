@@ -422,15 +422,17 @@ export class ConnectionManager {
       ),
       () => this.probe(config),
     ]
-    let lastError: unknown
+    let firstError: unknown
     for (const attempt of attempts)
       try {
         return { tools: await attempt() }
       } catch (error) {
-        lastError = error
+        // Keep the preferred Account's failure instead of hiding it behind
+        // the final anonymous probe's inevitable authentication error.
+        firstError ??= error
       }
     const message =
-      lastError instanceof Error ? lastError.message : 'Tool discovery failed'
+      firstError instanceof Error ? firstError.message : 'Tool discovery failed'
     if (!allowFailure) throw new Error(message)
     return { tools: [], error: message }
   }

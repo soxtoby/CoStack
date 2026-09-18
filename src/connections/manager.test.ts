@@ -326,6 +326,41 @@ describe('ConnectionManager', () => {
     await authenticated.close()
   })
 
+  test('preserves the authenticated discovery error when anonymous fallback also fails', async () => {
+    const authenticated = new ConnectionManager(
+      pool,
+      vault,
+      (_config, secrets) =>
+        Promise.reject(
+          new Error(secrets.Authorization ? 'missing_scope' : 'missing_token'),
+        ),
+    )
+    const created = await authenticated.create({
+      organizationId: 'org',
+      displayName: 'Discovery errors',
+      transport: { kind: 'streamable_http', url: 'https://mcp.example.test' },
+      groupIds: ['group'],
+      policies: [],
+      state: 'disabled',
+    })
+    await authenticated.addAccount({
+      connectionId: created.id,
+      kind: 'personal',
+      ownerUserId: 'one',
+      displayName: 'Mine',
+      secrets: { Authorization: 'test-token' },
+    })
+    await expect(
+      authenticated.refreshConnection(created.id, 'one'),
+    ).rejects.toThrow('missing_scope')
+    const health = await pool.query(
+      'SELECT error FROM connection_health WHERE connection_id=$1',
+      [created.id],
+    )
+    expect(health.rows[0].error).toBe('missing_scope')
+    await authenticated.close()
+  })
+
   test("never uses another user's Personal Account for discovery", async () => {
     const attempts: Array<string | undefined> = []
     const authenticated = new ConnectionManager(
