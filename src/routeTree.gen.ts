@@ -18,6 +18,7 @@ import { Route as DotwellKnownSplatRouteImport } from './routes/[.]well-known.$'
 import { Route as AppAuditRouteImport } from './routes/_app.audit'
 import { Route as AppConnectionsRouteImport } from './routes/_app.connections'
 import { Route as AppGroupsRouteImport } from './routes/_app.groups'
+import { Route as AppLoginRouteImport } from './routes/_app.login'
 import { Route as AppOverviewRouteImport } from './routes/_app.overview'
 import { Route as AppPreProvisionedAccessRouteImport } from './routes/_app.pre-provisioned-access'
 import { Route as AppPreferencesRouteImport } from './routes/_app.preferences'
@@ -76,6 +77,11 @@ const AppConnectionsRoute = AppConnectionsRouteImport.update({
 const AppGroupsRoute = AppGroupsRouteImport.update({
   id: '/groups',
   path: '/groups',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppLoginRoute = AppLoginRouteImport.update({
+  id: '/login',
+  path: '/login',
   getParentRoute: () => AppRoute,
 } as any)
 const AppOverviewRoute = AppOverviewRouteImport.update({
@@ -165,6 +171,7 @@ export interface FileRoutesByFullPath {
   '/audit': typeof AppAuditRoute
   '/connections': typeof AppConnectionsRoute
   '/groups': typeof AppGroupsRoute
+  '/login': typeof AppLoginRoute
   '/overview': typeof AppOverviewRoute
   '/pre-provisioned-access': typeof AppPreProvisionedAccessRoute
   '/preferences': typeof AppPreferencesRoute
@@ -190,6 +197,7 @@ export interface FileRoutesByTo {
   '/audit': typeof AppAuditRoute
   '/connections': typeof AppConnectionsRoute
   '/groups': typeof AppGroupsRoute
+  '/login': typeof AppLoginRoute
   '/overview': typeof AppOverviewRoute
   '/pre-provisioned-access': typeof AppPreProvisionedAccessRoute
   '/preferences': typeof AppPreferencesRoute
@@ -217,6 +225,7 @@ export interface FileRoutesById {
   '/_app/audit': typeof AppAuditRoute
   '/_app/connections': typeof AppConnectionsRoute
   '/_app/groups': typeof AppGroupsRoute
+  '/_app/login': typeof AppLoginRoute
   '/_app/overview': typeof AppOverviewRoute
   '/_app/pre-provisioned-access': typeof AppPreProvisionedAccessRoute
   '/_app/preferences': typeof AppPreferencesRoute
@@ -244,6 +253,7 @@ export interface FileRouteTypes {
     | '/audit'
     | '/connections'
     | '/groups'
+    | '/login'
     | '/overview'
     | '/pre-provisioned-access'
     | '/preferences'
@@ -269,6 +279,7 @@ export interface FileRouteTypes {
     | '/audit'
     | '/connections'
     | '/groups'
+    | '/login'
     | '/overview'
     | '/pre-provisioned-access'
     | '/preferences'
@@ -295,6 +306,7 @@ export interface FileRouteTypes {
     | '/_app/audit'
     | '/_app/connections'
     | '/_app/groups'
+    | '/_app/login'
     | '/_app/overview'
     | '/_app/pre-provisioned-access'
     | '/_app/preferences'
@@ -391,6 +403,13 @@ declare module '@tanstack/react-router' {
       path: '/groups'
       fullPath: '/groups'
       preLoaderRoute: typeof AppGroupsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/login': {
+      id: '/_app/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof AppLoginRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/overview': {
@@ -505,6 +524,7 @@ interface AppRouteChildren {
   AppAuditRoute: typeof AppAuditRoute
   AppConnectionsRoute: typeof AppConnectionsRoute
   AppGroupsRoute: typeof AppGroupsRoute
+  AppLoginRoute: typeof AppLoginRoute
   AppOverviewRoute: typeof AppOverviewRoute
   AppPreProvisionedAccessRoute: typeof AppPreProvisionedAccessRoute
   AppPreferencesRoute: typeof AppPreferencesRoute
@@ -519,6 +539,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppAuditRoute: AppAuditRoute,
   AppConnectionsRoute: AppConnectionsRoute,
   AppGroupsRoute: AppGroupsRoute,
+  AppLoginRoute: AppLoginRoute,
   AppOverviewRoute: AppOverviewRoute,
   AppPreProvisionedAccessRoute: AppPreProvisionedAccessRoute,
   AppPreferencesRoute: AppPreferencesRoute,
