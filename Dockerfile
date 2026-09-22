@@ -3,7 +3,7 @@ WORKDIR /app
 COPY package.json bun.lock ./
 RUN bun install --frozen-lockfile
 COPY . .
-RUN bun run build
+RUN bun run build --logLevel warn
 
 FROM mcr.microsoft.com/dotnet/sdk:10.0.102-noble AS runtime
 COPY --from=oven/bun:1.4.0 /usr/local/bin/bun /usr/local/bin/bun
