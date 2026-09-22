@@ -117,6 +117,58 @@ for (const [role, administrator, capabilities] of [
       }
     },
   )
+  test(
+    role +
+      ' receives credential names and plain variables only for reconfigurable accounts',
+    async () => {
+      await pool.query(
+        "UPDATE mcp_accounts SET secret_ciphertext=$1, secret_nonce=$1, secret_format_version=1, variables=jsonb_build_object('BASE_URL', id) WHERE id IN ('shared', 'other-user', 'recovery-admin')",
+        [new Uint8Array([1])],
+      )
+      try {
+        const response = await connectionSnapshot(
+          pool,
+          {
+            id: 'other-user',
+            disabled: false,
+            administrator,
+            capabilities: new Set<Capability>(capabilities),
+          },
+          new URL('http://localhost/api/control?connection=connection'),
+          () => Promise.resolve({ rows: [] }),
+          undefined,
+          (id) => Promise.resolve([`${id}_KEY`]),
+        )
+        const data = await response.json()
+        const accounts = Object.fromEntries(
+          data.detail.accounts.map(
+            (account: {
+              id: string
+              secret_names?: Array<string>
+              variables?: Record<string, string>
+            }) => [
+              account.id,
+              { names: account.secret_names, variables: account.variables },
+            ],
+          ),
+        )
+        expect(accounts['other-user']).toEqual({
+          names: ['other-user_KEY'],
+          variables: { BASE_URL: 'other-user' },
+        })
+        expect(accounts.shared).toEqual(
+          administrator || role === 'account manager'
+            ? { names: ['shared_KEY'], variables: { BASE_URL: 'shared' } }
+            : { names: undefined, variables: undefined },
+        )
+        expect(JSON.stringify(data)).not.toContain('secret_ciphertext')
+      } finally {
+        await pool.query(
+          "UPDATE mcp_accounts SET secret_ciphertext=null, secret_nonce=null, secret_format_version=null, variables='{}'",
+        )
+      }
+    },
+  )
   test(role + ' sees only shared and their own personal accounts', async () => {
     for (const id of ['other-user', 'recovery-admin']) {
       const response = await connectionSnapshot(

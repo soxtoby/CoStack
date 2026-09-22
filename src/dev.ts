@@ -5,18 +5,19 @@ import { Pool } from 'pg'
 import { migrate } from './database/migrate'
 
 const directory = '.pglite'
+// Override when a real PostgreSQL server already occupies the default port.
+const port = Number(process.env.PGLITE_PORT ?? 5432)
 await mkdir(directory, { recursive: true })
 
 const database = await PGlite.create(directory)
 const socket = new PGLiteSocketServer({
   db: database,
   host: '127.0.0.1',
-  port: 5432,
+  port,
 })
 await socket.start()
 
-const databaseUrl =
-  'postgresql://postgres:postgres@127.0.0.1:5432/postgres?sslmode=disable'
+const databaseUrl = `postgresql://postgres:postgres@127.0.0.1:${port}/postgres?sslmode=disable`
 const pool = new Pool({ connectionString: databaseUrl, max: 1 })
 await migrate(pool)
 await pool.end()

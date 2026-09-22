@@ -278,6 +278,8 @@ type ControlData = {
       display_name: string
       namespace: string
       has_secret: boolean
+      secret_names?: Array<string>
+      variables?: Record<string, string>
     }>
   }
 }
@@ -863,6 +865,10 @@ function OAuthClientForm(p: {
         <input
           name="clientSecret"
           type="password"
+          autoComplete="off"
+          data-lpignore="true"
+          data-1p-ignore=""
+          data-bwignore=""
           required={!hasSecret}
           value={secret ?? (hasSecret ? '********' : '')}
           onChange={(e) => {
@@ -872,7 +878,6 @@ function OAuthClientForm(p: {
           onFocus={(e) => {
             if (secret === null) e.target.select()
           }}
-          autoComplete="new-password"
         />
       </Field>
       <Field label="Scopes">
@@ -901,7 +906,19 @@ function AccountForm(p: {
     p.account?.kind ?? 'personal',
   )
   const [manual, setManual] = useState(!p.oauth)
-  const [environment, setEnvironment] = useState([{ name: '', value: '' }])
+  const savedNames = p.account?.secret_names ?? []
+  const savedRows = [
+    ...Object.entries(p.account?.variables ?? {}).map(([name, value]) => ({
+      name,
+      value,
+      secret: false,
+    })),
+    ...savedNames.map((name) => ({ name, value: '', secret: true })),
+  ]
+  const blankRow = { name: '', value: '', secret: true }
+  const [environment, setEnvironment] = useState(
+    savedRows.length ? savedRows : [blankRow],
+  )
   const [createdId, setCreatedId] = useState<string>()
   return (
     <Form
@@ -929,8 +946,20 @@ function AccountForm(p: {
         const secrets = manual
           ? p.oauth
             ? JSON.parse(String(f.get('secrets') || '{}'))
-            : Object.fromEntries(variables.map((row) => [row.name, row.value]))
+            : Object.fromEntries(
+                variables
+                  .filter((row) => row.secret)
+                  .map((row) => [row.name, row.value]),
+              )
           : undefined
+        const plainVariables =
+          manual && !p.oauth
+            ? Object.fromEntries(
+                variables
+                  .filter((row) => !row.secret)
+                  .map((row) => [row.name, row.value]),
+              )
+            : undefined
         const account =
           p.account ??
           (createdId
@@ -943,12 +972,14 @@ function AccountForm(p: {
                   connectionId: p.connectionId,
                   displayName: String(f.get('displayName')),
                   secrets,
+                  variables: plainVariables,
                 },
               ))
         if (manual && p.account) {
           await controlAct(`replace-${kind}-secret`, {
             id: account.id,
             secrets,
+            variables: plainVariables,
           })
         }
         if (!manual) {
@@ -1018,8 +1049,10 @@ function AccountForm(p: {
         <div className="environment-fields">
           <strong>Environment variables</strong>
           <p className="note">
-            Passed to the server process. Values are stored encrypted.
-            {p.account && ' Saving replaces all existing account variables.'}
+            Passed to the server process. Secret values are stored encrypted and
+            never shown again.
+            {savedNames.length > 0 &&
+              ' Leave a secret blank to keep its saved value; removing a row deletes it.'}
           </p>
           {environment.map((row, index) => (
             <div className="environment-row" key={index}>
@@ -1031,6 +1064,9 @@ function AccountForm(p: {
                   required={!!row.value}
                   pattern="[^=\u0000]+"
                   autoComplete="off"
+                  data-lpignore="true"
+                  data-1p-ignore=""
+                  data-bwignore=""
                   spellCheck={false}
                   onChange={(e) =>
                     setEnvironment(
@@ -1044,8 +1080,16 @@ function AccountForm(p: {
               <Field label="Value">
                 <input
                   aria-label={`Environment variable ${index + 1} value`}
-                  type="password"
-                  autoComplete="new-password"
+                  type={row.secret ? 'password' : 'text'}
+                  autoComplete="off"
+                  data-lpignore="true"
+                  data-1p-ignore=""
+                  data-bwignore=""
+                  placeholder={
+                    row.secret && savedNames.includes(row.name)
+                      ? '••••••••'
+                      : ''
+                  }
                   value={row.value}
                   onChange={(e) =>
                     setEnvironment(
@@ -1056,6 +1100,28 @@ function AccountForm(p: {
                   }
                 />
               </Field>
+              <button
+                type="button"
+                className="secondary environment-secret"
+                aria-pressed={row.secret}
+                aria-label={`Environment variable ${index + 1} is secret`}
+                title={
+                  row.secret
+                    ? 'Secret: stored encrypted and never shown again'
+                    : 'Plain: shown when reconfiguring'
+                }
+                onClick={() =>
+                  setEnvironment(
+                    environment.map((item, i) =>
+                      i === index
+                        ? { ...item, secret: !item.secret, value: '' }
+                        : item,
+                    ),
+                  )
+                }
+              >
+                <UiIcon name={row.secret ? 'lock' : 'unlock'} />
+              </button>
               <button
                 type="button"
                 className="secondary environment-remove"
@@ -1071,9 +1137,7 @@ function AccountForm(p: {
           <button
             type="button"
             className="secondary"
-            onClick={() =>
-              setEnvironment([...environment, { name: '', value: '' }])
-            }
+            onClick={() => setEnvironment([...environment, blankRow])}
           >
             Add variable
           </button>
@@ -1888,13 +1952,16 @@ export function Sso({
             <input
               name="clientSecret"
               type="password"
+              autoComplete="off"
+              data-lpignore="true"
+              data-1p-ignore=""
+              data-bwignore=""
               required={!configured}
               value={secret ?? (configured ? '********' : '')}
               onChange={(e) => setSecret(e.target.value)}
               onFocus={(e) => {
                 if (secret === null) e.target.select()
               }}
-              autoComplete="new-password"
             />
             {configured && (
               <small>Enter a new secret to replace the stored value.</small>

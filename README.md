@@ -17,7 +17,7 @@ bun install
 bun run dev
 ```
 
-The development command starts persistent PGlite on loopback, migrates it, then starts TanStack Start. It serves the same `/mcp`, `/health`, auth, and administration routes as production. PGlite data lives in `.pglite`.
+The development command starts persistent PGlite on loopback, migrates it, then starts TanStack Start. It serves the same `/mcp`, `/health`, auth, and administration routes as production. PGlite data lives in `.pglite`. It listens on port 5432; set `PGLITE_PORT` when another PostgreSQL server already uses that port.
 
 Open `/api/setup/bootstrap` with the bootstrap token to create the first Administrator and organization. Configure one OIDC provider through Better Auth. Pre-provision a User's verified email and Groups before their first SSO login. Keep the recovery token outside PostgreSQL.
 

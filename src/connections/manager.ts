@@ -181,6 +181,7 @@ export class ConnectionManager {
     ownerUserId?: string
     displayName: string
     secrets?: Record<string, string>
+    variables?: Record<string, string>
   }): Promise<AccountSummary> {
     if ((input.kind === 'personal') !== Boolean(input.ownerUserId))
       throw new Error('Personal Accounts require exactly one owner')
@@ -207,8 +208,8 @@ export class ConnectionManager {
     await this.pool.query(
       `INSERT INTO mcp_accounts
        (id, connection_id, kind, owner_user_id, display_name, namespace,
-        secret_ciphertext, secret_nonce, secret_format_version)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+        secret_ciphertext, secret_nonce, secret_format_version, variables)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
       [
         id,
         input.connectionId,
@@ -219,6 +220,7 @@ export class ConnectionManager {
         envelope?.ciphertext ?? null,
         envelope?.nonce ?? null,
         envelope?.version ?? null,
+        input.variables ?? {},
       ],
     )
     return {
@@ -275,13 +277,36 @@ export class ConnectionManager {
     return completed
   }
 
-  async replaceAccountSecrets(id: string, secrets: Record<string, string>) {
-    const envelope = await this.vault.seal(secrets)
+  /** Names of an Account's stored credentials, without their values. */
+  async accountSecretNames(id: string) {
+    const secrets = await this.accountSecrets(id)
+    return Object.keys(secrets).filter(
+      (name) => name !== 'oauthTokens' && name !== 'oauthClient',
+    )
+  }
+
+  /**
+   * Replaces an Account's credentials. A blank secret keeps the stored value of the same name.
+   * Plain variables, when given, replace the stored plain variables.
+   */
+  async replaceAccountSecrets(
+    id: string,
+    secrets: Record<string, string>,
+    variables?: Record<string, string>,
+  ) {
+    const existing = await this.accountSecrets(id)
+    const merged = Object.fromEntries(
+      Object.entries(secrets).map(([name, value]) => [
+        name,
+        value === '' ? (existing[name] ?? '') : value,
+      ]),
+    )
+    const envelope = await this.vault.seal(merged)
     const result = await this.pool.query(
       `UPDATE mcp_accounts SET secret_ciphertext=$1, secret_nonce=$2,
-       secret_format_version=$3, updated_at=now() WHERE id=$4
-       RETURNING connection_id`,
-      [envelope.ciphertext, envelope.nonce, envelope.version, id],
+       secret_format_version=$3, variables=COALESCE($5, variables), updated_at=now()
+       WHERE id=$4 RETURNING connection_id`,
+      [envelope.ciphertext, envelope.nonce, envelope.version, id, variables ?? null],
     )
     const row = result.rows[0]
     if (!row) throw new Error('Account not found')
@@ -375,7 +400,7 @@ export class ConnectionManager {
     accountId: string,
   ) {
     const result = await this.pool.query(
-      `SELECT a.secret_ciphertext, a.secret_nonce, a.secret_format_version,
+      `SELECT a.secret_ciphertext, a.secret_nonce, a.secret_format_version, a.variables,
               c.oauth_client_ciphertext IS NOT NULL AS has_oauth
        FROM mcp_accounts a JOIN mcp_connections c ON c.id=a.connection_id
        WHERE a.id=$1 AND a.connection_id=$2`,
@@ -383,13 +408,7 @@ export class ConnectionManager {
     )
     const row = result.rows[0]
     if (!row) throw new Error('Account not found')
-    let secrets: Record<string, string> = {}
-    if (row.secret_ciphertext)
-      secrets = await this.vault.open({
-        ciphertext: new Uint8Array(row.secret_ciphertext),
-        nonce: new Uint8Array(row.secret_nonce),
-        version: row.secret_format_version as number,
-      })
+    const secrets = await this.accountEnvironment(row)
     const hasOAuth = Boolean(row.has_oauth || secrets.oauthTokens)
     delete secrets.oauthTokens
     delete secrets.oauthClient
@@ -453,7 +472,7 @@ export class ConnectionManager {
     const result = await this.pool.query(
       `SELECT c.transport_config, c.state,
               c.oauth_client_ciphertext IS NOT NULL AS has_oauth,
-              a.secret_ciphertext, a.secret_nonce, a.secret_format_version
+              a.secret_ciphertext, a.secret_nonce, a.secret_format_version, a.variables
        FROM mcp_connections c
        LEFT JOIN mcp_accounts a ON a.id=$2 AND a.connection_id=c.id
        WHERE c.id=$1`,
@@ -462,14 +481,7 @@ export class ConnectionManager {
     const row = result.rows[0]
     if (!row) throw new Error('Connection or Account not found')
     if (row.state !== 'enabled') throw new Error('Connection is disabled')
-    let secrets: Record<string, string> = {}
-    if (row.secret_ciphertext) {
-      secrets = await this.vault.open({
-        ciphertext: new Uint8Array(row.secret_ciphertext),
-        nonce: new Uint8Array(row.secret_nonce),
-        version: row.secret_format_version as number,
-      })
-    }
+    const secrets = await this.accountEnvironment(row)
     const hasOAuth = Boolean(row.has_oauth || secrets.oauthTokens)
     delete secrets.oauthTokens
     delete secrets.oauthClient
@@ -564,6 +576,38 @@ export class ConnectionManager {
        SET checked_at=now(), healthy=true, error=null`,
       [id],
     )
+  }
+
+  /** An Account's plain variables overlaid with its decrypted secrets. */
+  private async accountEnvironment(row: {
+    variables?: Record<string, string> | null
+    secret_ciphertext?: Uint8Array | null
+    secret_nonce?: Uint8Array | null
+    secret_format_version?: number | null
+  }): Promise<Record<string, string>> {
+    const secrets = row.secret_ciphertext
+      ? await this.vault.open({
+          ciphertext: new Uint8Array(row.secret_ciphertext),
+          nonce: new Uint8Array(row.secret_nonce ?? []),
+          version: row.secret_format_version as number,
+        })
+      : {}
+    return { ...(row.variables ?? {}), ...secrets }
+  }
+
+  private async accountSecrets(id: string): Promise<Record<string, string>> {
+    const result = await this.pool.query(
+      'SELECT secret_ciphertext, secret_nonce, secret_format_version FROM mcp_accounts WHERE id=$1',
+      [id],
+    )
+    const row = result.rows[0]
+    if (!row) throw new Error('Account not found')
+    if (!row.secret_ciphertext) return {}
+    return await this.vault.open({
+      ciphertext: new Uint8Array(row.secret_ciphertext),
+      nonce: new Uint8Array(row.secret_nonce),
+      version: row.secret_format_version as number,
+    })
   }
 
   private async restartConnection(connectionId: string) {

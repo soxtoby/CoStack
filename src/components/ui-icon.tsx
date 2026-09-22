@@ -5,6 +5,8 @@ const paths = {
   close: 'm6 6 12 12M6 18 18 6',
   check: 'm5 12 4 4L19 6',
   download: 'M12 3v12m-5-5 5 5 5-5M5 16v5h14v-5',
+  lock: 'M6 11h12v10H6zM8 11V7a4 4 0 0 1 8 0v4',
+  unlock: 'M6 11h12v10H6zM8 11V7a4 4 0 0 1 7.7-1.5',
 } as const
 
 export function UiIcon({ name }: { name: keyof typeof paths }) {

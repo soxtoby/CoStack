@@ -234,6 +234,82 @@ describe('ConnectionManager', () => {
     expect(await manager.visibleAccounts(connectionId, 'one')).toHaveLength(1)
   })
 
+  test('reports credential names and keeps values left blank on replace', async () => {
+    const connectionId = (
+      await pool.query(
+        "SELECT id FROM mcp_connections WHERE namespace='github'",
+      )
+    ).rows[0].id as string
+    const account = await manager.addAccount({
+      connectionId,
+      kind: 'shared',
+      displayName: 'Names',
+      secrets: { API_KEY: 'first', REGION: 'eu' },
+      variables: { BASE_URL: 'https://api.example.test', REGION: 'plain' },
+    })
+    try {
+      expect(await manager.accountSecretNames(account.id)).toEqual([
+        'API_KEY',
+        'REGION',
+      ])
+      await manager.replaceAccountSecrets(
+        account.id,
+        { API_KEY: '', TOKEN: 'new' },
+        { BASE_URL: 'https://api.example.test/v2' },
+      )
+      const row = (
+        await pool.query(
+          'SELECT secret_ciphertext, secret_nonce, secret_format_version, variables FROM mcp_accounts WHERE id=$1',
+          [account.id],
+        )
+      ).rows[0]
+      expect(
+        await vault.open({
+          ciphertext: new Uint8Array(row.secret_ciphertext),
+          nonce: new Uint8Array(row.secret_nonce),
+          version: row.secret_format_version as number,
+        }),
+      ).toEqual({ API_KEY: 'first', TOKEN: 'new' })
+      expect(row.variables).toEqual({ BASE_URL: 'https://api.example.test/v2' })
+    } finally {
+      await pool.query('DELETE FROM mcp_accounts WHERE id=$1', [account.id])
+    }
+  })
+
+  test('passes plain variables to the server beneath secrets', async () => {
+    const environments: Array<Record<string, string>> = []
+    const capturing = new ConnectionManager(pool, vault, (_config, secrets) => {
+      environments.push(secrets)
+      return Promise.resolve(fake)
+    })
+    const created = await capturing.create({
+      organizationId: 'org',
+      displayName: 'Variables',
+      transport: { kind: 'streamable_http', url: 'https://mcp.example.test' },
+      groupIds: ['group'],
+      policies: [{ pattern: '*', effect: 'allow' }],
+      state: 'enabled',
+    })
+    const account = await capturing.addAccount({
+      connectionId: created.id,
+      kind: 'shared',
+      displayName: 'Team',
+      secrets: { API_KEY: 'secret', SHARED: 'from-secret' },
+      variables: { BASE_URL: 'https://api.example.test', SHARED: 'from-plain' },
+    })
+    try {
+      await capturing.callAccountTool(created.id, account.id, 'read_issue', {})
+      expect(environments.at(-1)).toEqual({
+        BASE_URL: 'https://api.example.test',
+        SHARED: 'from-secret',
+        API_KEY: 'secret',
+      })
+    } finally {
+      await capturing.close()
+      await pool.query('DELETE FROM mcp_connections WHERE id=$1', [created.id])
+    }
+  })
+
   test('account creation reports namespace conflicts without exposing another account', async () => {
     const connectionId = (
       await pool.query(

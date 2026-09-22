@@ -120,6 +120,7 @@ async function snapshot(request: Request, url: URL) {
     url,
     auditRows,
     async (id) => (await manager()).oauth.configuration(id),
+    async (id) => (await manager()).accountSecretNames(id),
   )
 }
 
@@ -209,12 +210,14 @@ async function accountAction(body: Record<string, unknown>, action: string) {
   const service = await manager()
   if (action === 'create-shared-account') {
     const secrets = objectStrings(body.secrets)
+    const variables = objectStrings(body.variables)
     return Response.json(
       await service.addAccount({
         connectionId: String(body.connectionId),
         kind: 'shared',
         displayName: String(body.displayName),
         ...(secrets ? { secrets } : {}),
+        ...(variables ? { variables } : {}),
       }),
     )
   }
@@ -223,6 +226,7 @@ async function accountAction(body: Record<string, unknown>, action: string) {
     await service.replaceAccountSecrets(
       String(body.id),
       objectStrings(body.secrets) ?? {},
+      objectStrings(body.variables),
     )
     return Response.json({ ok: true })
   }
@@ -247,6 +251,7 @@ async function createPersonalAccount(
   const actor = await principal(request)
   await assertEligible(String(body.connectionId), actor.current.user.id)
   const secrets = objectStrings(body.secrets)
+  const variables = objectStrings(body.variables)
   return Response.json(
     await (
       await manager()
@@ -256,6 +261,7 @@ async function createPersonalAccount(
       ownerUserId: actor.current.user.id,
       displayName: String(body.displayName),
       ...(secrets ? { secrets } : {}),
+      ...(variables ? { variables } : {}),
     }),
   )
 }
@@ -274,7 +280,11 @@ async function managePersonalAccount(
   if (!found.rows[0]) throw new Response('Forbidden', { status: 403 })
   const service = await manager()
   if (action === 'replace-personal-secret')
-    await service.replaceAccountSecrets(id, objectStrings(body.secrets) ?? {})
+    await service.replaceAccountSecrets(
+      id,
+      objectStrings(body.secrets) ?? {},
+      objectStrings(body.variables),
+    )
   else if (action === 'delete-personal-secret')
     await service.clearAccountSecrets(id)
   else await service.deleteAccount(id)

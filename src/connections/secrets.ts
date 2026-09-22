@@ -11,7 +11,15 @@ export class SecretVault {
 
   static async fromBase64(value = process.env.ACCOUNT_SECRET_KEY) {
     if (!value) throw new Error('ACCOUNT_SECRET_KEY is required')
-    const bytes = Uint8Array.from(atob(value), (character) =>
+    let decoded: string
+    try {
+      decoded = atob(value)
+    } catch {
+      throw new Error(
+        'ACCOUNT_SECRET_KEY must be 32 random bytes encoded as base64; see README for how to generate one',
+      )
+    }
+    const bytes = Uint8Array.from(decoded, (character) =>
       character.charCodeAt(0),
     )
     if (bytes.byteLength !== 32)

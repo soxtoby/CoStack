@@ -726,7 +726,10 @@ fieldset {
 .modal {
   width: min(560px, calc(100vw - 32px));
   max-height: calc(100vh - 48px);
-  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  /* The form scrolls, not the dialog, so frames that password managers inject below inputs cannot add a scrollbar. */
+  overflow: hidden;
   padding: 0;
   border: 1px solid var(--line-strong);
   border-radius: var(--radius-lg);
@@ -748,10 +751,15 @@ fieldset {
   margin: 0;
   font-size: 15px;
 }
+.modal > header {
+  flex: none;
+}
 .modal > .action-form {
   margin: 0;
   border: 0;
   border-radius: 0;
+  min-height: 0;
+  overflow: auto;
 }
 .modal > .action-form > .field {
   flex-basis: 100%;
@@ -1777,9 +1785,16 @@ fieldset {
 }
 .environment-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 32px;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 32px 32px;
   align-items: start;
   gap: 8px;
+}
+.environment-secret[aria-pressed='true'] {
+  color: var(--accent-text);
+  border-color: var(--accent);
+}
+.environment-row + .environment-row > .environment-secret {
+  margin-top: 0;
 }
 .environment-row > label {
   min-width: 0;
@@ -1793,6 +1808,7 @@ fieldset {
 .environment-row + .environment-row > .environment-remove {
   margin-top: 0;
 }
+.environment-secret,
 .environment-remove {
   margin-top: 22px;
   width: 32px;

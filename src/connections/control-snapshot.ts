@@ -11,6 +11,7 @@ export async function connectionSnapshot(
   url: URL,
   auditRows: (pool: Pool, url: URL) => Promise<{ rows: Array<unknown> }>,
   oauthConfiguration?: (id: string) => Promise<OAuthClientSummary | undefined>,
+  accountSecretNames?: (id: string) => Promise<Array<string>>,
 ) {
   const canConnections = may(authorization, 'manage_connections')
   const canAccounts = may(authorization, 'manage_accounts')
@@ -48,7 +49,9 @@ export async function connectionSnapshot(
         detailId,
         authorization.id,
         canConnections || canAccounts,
+        canAccounts,
         canAccounts ? oauthConfiguration : undefined,
+        accountSecretNames,
       )
     : undefined
   return Response.json({
@@ -83,7 +86,9 @@ async function connectionDetail(
   id: string,
   userId: string,
   canViewAll: boolean,
+  canAccounts: boolean,
   oauthConfiguration?: (id: string) => Promise<OAuthClientSummary | undefined>,
+  accountSecretNames?: (id: string) => Promise<Array<string>>,
 ) {
   const [connection, policies, tools, accounts] = await Promise.all([
     pool.query(
@@ -107,7 +112,7 @@ async function connectionDetail(
       [id],
     ),
     pool.query(
-      `SELECT id,kind,owner_user_id,display_name,namespace,secret_ciphertext IS NOT NULL has_secret
+      `SELECT id,kind,owner_user_id,display_name,namespace,variables,secret_ciphertext IS NOT NULL has_secret
       FROM mcp_accounts WHERE connection_id=$1 AND (kind='shared' OR owner_user_id=$2) ORDER BY display_name`,
       [id, userId],
     ),
@@ -130,7 +135,23 @@ async function connectionDetail(
         tool.annotations ?? undefined,
       ),
     })),
-    accounts: accounts.rows,
+    // Plain variables and secret names are shown only to whoever may reconfigure the Account; secret values never leave the server.
+    accounts: await Promise.all(
+      accounts.rows.map(async ({ variables, ...account }) => {
+        const reconfigurable =
+          account.kind === 'shared'
+            ? canAccounts
+            : account.owner_user_id === userId
+        if (!reconfigurable) return account
+        return {
+          ...account,
+          variables,
+          ...(account.has_secret && accountSecretNames
+            ? { secret_names: await accountSecretNames(account.id) }
+            : {}),
+        }
+      }),
+    ),
   }
 }
 
