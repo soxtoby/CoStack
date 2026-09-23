@@ -101,6 +101,6 @@ function registryTransport(server: RegistryServer['server']): TransportConfig {
   return {
     kind: 'stdio',
     command: 'dnx',
-    args: [`${pkg.identifier}@${pkg.version}`, '--', ...values],
+    args: ['--yes', `${pkg.identifier}@${pkg.version}`, '--', ...values],
   }
 }

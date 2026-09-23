@@ -54,6 +54,6 @@ Common services appear immediately on Add connection, without registry access. T
 
 ## Scope
 
-CoStack supports Streamable HTTP and STDIO upstreams, tools only, local Groups, one OIDC provider, and metadata-only audit logs. STDIO commands may use `bunx`, `dotnet`, or another executable already in the image. Runtime file uploads, legacy SSE, payload logging, SAML, infrastructure provisioning, and automatic package upgrades are not supported.
+CoStack supports Streamable HTTP and STDIO upstreams, tools only, local Groups, one OIDC provider, and metadata-only audit logs. STDIO commands may use `bunx`, `dotnet`, `dnx --yes` (the `--yes` is required because there is no interactive prompt to approve the download), or another executable already in the image. Runtime file uploads, legacy SSE, payload logging, SAML, infrastructure provisioning, and automatic package upgrades are not supported.
 
 Run `bun run check` before submitting changes. Build locally with `bun run build`, then run `bun run start` against PostgreSQL.

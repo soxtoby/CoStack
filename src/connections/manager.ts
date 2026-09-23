@@ -306,7 +306,13 @@ export class ConnectionManager {
       `UPDATE mcp_accounts SET secret_ciphertext=$1, secret_nonce=$2,
        secret_format_version=$3, variables=COALESCE($5, variables), updated_at=now()
        WHERE id=$4 RETURNING connection_id`,
-      [envelope.ciphertext, envelope.nonce, envelope.version, id, variables ?? null],
+      [
+        envelope.ciphertext,
+        envelope.nonce,
+        envelope.version,
+        id,
+        variables ?? null,
+      ],
     )
     const row = result.rows[0]
     if (!row) throw new Error('Account not found')

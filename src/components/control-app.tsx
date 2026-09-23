@@ -550,7 +550,9 @@ export function ConnectionForm(p: {
                 <span>npm</span>
                 <code>bunx @scope/server@1.2.3 --transport stdio</code>
                 <span>NuGet</span>
-                <code>dnx Example.Mcp.Server@1.2.3 -- --transport stdio</code>
+                <code>
+                  dnx --yes Example.Mcp.Server@1.2.3 -- --transport stdio
+                </code>
               </div>
             </Field>
           )}

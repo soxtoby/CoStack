@@ -199,7 +199,7 @@ describe('registry import', () => {
     expect(result.transport).toEqual({
       kind: 'stdio',
       command: 'dnx',
-      args: ['Example.Mcp.Server@1.2.3', '--', '--transport', 'stdio'],
+      args: ['--yes', 'Example.Mcp.Server@1.2.3', '--', '--transport', 'stdio'],
     })
   })
 })
