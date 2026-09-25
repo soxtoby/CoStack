@@ -2592,9 +2592,11 @@ export function ConfigureConnectionPage({
   tab,
 }: View & { connectionId: string; tab: 'connection' | 'tools' }) {
   const { control, error, reload } = useConnectionData(connectionId)
+  const navigate = useNavigate()
   const [actionError, setActionError] = useState('')
   const [busy, setBusy] = useState(false)
   const [dirty, setDirty] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const [editRevision, setEditRevision] = useState(0)
   const canManage =
     data.authorization?.administrator ||
@@ -2675,16 +2677,26 @@ export function ConfigureConnectionPage({
                 {busy ? 'Refreshing…' : 'Refresh tools'}
               </button>
             ) : (
-              <button
-                type="button"
-                className="secondary"
-                disabled={busy || dirty}
-                onClick={() =>
-                  void run('set-enabled', { enabled: d.state !== 'enabled' })
-                }
-              >
-                {d.state === 'enabled' ? 'Disable' : 'Enable'}
-              </button>
+              <>
+                <button
+                  type="button"
+                  className="danger"
+                  disabled={busy}
+                  onClick={() => setDeleting(true)}
+                >
+                  Delete connection
+                </button>
+                <button
+                  type="button"
+                  className="secondary"
+                  disabled={busy || dirty}
+                  onClick={() =>
+                    void run('set-enabled', { enabled: d.state !== 'enabled' })
+                  }
+                >
+                  {d.state === 'enabled' ? 'Disable' : 'Enable'}
+                </button>
+              </>
             )
           }
           key={`${d.id}:${d.revision}:${editRevision}`}
@@ -2715,6 +2727,50 @@ export function ConfigureConnectionPage({
             </details>
           )}
       </div>
+      {deleting && (
+        <Modal
+          title={`Delete ${d.display_name}`}
+          close={() => setDeleting(false)}
+        >
+          <DeleteConnectionForm
+            displayName={d.display_name}
+            namespace={d.namespace}
+            cancel={() => setDeleting(false)}
+            confirm={async () => {
+              await controlAct('delete-connection', { id: connectionId })
+              void navigate({ to: '/connections' })
+            }}
+          />
+        </Modal>
+      )}
     </div>
+  )
+}
+
+export function DeleteConnectionForm(p: {
+  displayName: string
+  namespace: string
+  cancel: () => void
+  confirm: () => Promise<void>
+}) {
+  return (
+    <Form
+      submit="Delete connection"
+      submitIcon={null}
+      cancel={p.cancel}
+      resetOnSuccess={false}
+      go={p.confirm}
+    >
+      <p>
+        Deleting <b>{p.displayName}</b> removes its tools from the Gateway MCP
+        and permanently deletes every Shared and Personal Account signed in to
+        it, including credentials belonging to other Users, along with its Tool
+        Policies and Group access. Audit records are kept.
+      </p>
+      <p className="fine">
+        The <code>{p.namespace}__*</code> namespace becomes available for a new
+        connection. This cannot be undone.
+      </p>
+    </Form>
   )
 }

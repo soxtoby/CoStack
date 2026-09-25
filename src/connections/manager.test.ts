@@ -234,6 +234,99 @@ describe('ConnectionManager', () => {
     expect(await manager.visibleAccounts(connectionId, 'one')).toHaveLength(1)
   })
 
+  test('deletes a connection with its Accounts, closes live clients, and keeps audit history', async () => {
+    let closed = 0
+    const local = new ConnectionManager(pool, vault, () =>
+      Promise.resolve({
+        ...fake,
+        close: () => {
+          closed += 1
+          return Promise.resolve()
+        },
+      }),
+    )
+    await pool.query(
+      `INSERT INTO principals (id, organization_id, kind, display_name)
+       VALUES ('deleter', 'org', 'user', 'Deleter')`,
+    )
+    await pool.query(
+      "INSERT INTO users (principal_id, email) VALUES ('deleter', 'deleter@example.test')",
+    )
+    const created = await local.create({
+      organizationId: 'org',
+      displayName: 'Doomed',
+      transport: { kind: 'streamable_http', url: 'https://doomed.example' },
+      groupIds: ['group'],
+      policies: [{ pattern: '*', effect: 'allow' }],
+      state: 'enabled',
+    })
+    const shared = await local.addAccount({
+      connectionId: created.id,
+      kind: 'shared',
+      displayName: 'Team',
+      secrets: { Authorization: 'secret' },
+    })
+    const personal = await local.addAccount({
+      connectionId: created.id,
+      kind: 'personal',
+      ownerUserId: 'deleter',
+      displayName: 'Mine',
+      secrets: { Authorization: 'secret' },
+    })
+    await pool.query(
+      `INSERT INTO audit_records (id, organization_id, principal_id, connection_id, account_id, tool_name, outcome)
+       VALUES ('audit-doomed', 'org', 'deleter', $1, $2, 'read_issue', 'success')`,
+      [created.id, shared.id],
+    )
+    await local.callAccountTool(created.id, shared.id, 'read_issue', {})
+    closed = 0
+
+    await local.delete(created.id)
+
+    expect(closed).toBe(1)
+    const rows = async (sql: string, values: Array<unknown> = []) =>
+      (await pool.query(sql, values)).rowCount
+    expect(
+      await rows('SELECT 1 FROM mcp_connections WHERE id=$1', [created.id]),
+    ).toBe(0)
+    expect(
+      await rows('SELECT 1 FROM mcp_accounts WHERE connection_id=$1', [
+        created.id,
+      ]),
+    ).toBe(0)
+    expect(
+      await rows(
+        'SELECT 1 FROM account_namespace_claims WHERE namespace = ANY($1)',
+        [[shared.namespace, personal.namespace]],
+      ),
+    ).toBe(0)
+    for (const table of [
+      'connection_groups',
+      'tool_policies',
+      'connection_tools',
+      'connection_health',
+    ])
+      expect(
+        await rows(`SELECT 1 FROM ${table} WHERE connection_id=$1`, [
+          created.id,
+        ]),
+      ).toBe(0)
+    const audit = await pool.query(
+      "SELECT connection_id, account_id, tool_name FROM audit_records WHERE id='audit-doomed'",
+    )
+    expect(audit.rows[0]).toEqual({
+      connection_id: null,
+      account_id: null,
+      tool_name: 'read_issue',
+    })
+    await expect(local.delete(created.id)).rejects.toThrow(
+      'Connection not found',
+    )
+    await expect(
+      local.callAccountTool(created.id, shared.id, 'read_issue', {}),
+    ).rejects.toThrow('Connection or Account not found')
+  })
+
   test('reports credential names and keeps values left blank on replace', async () => {
     const connectionId = (
       await pool.query(

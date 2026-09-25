@@ -168,6 +168,10 @@ async function connectionAction(
     await service.refreshConnection(String(body.id), userId)
     return Response.json({ ok: true })
   }
+  if (action === 'delete-connection') {
+    await service.delete(String(body.id))
+    return Response.json({ ok: true })
+  }
   if (action === 'create-registry-source') {
     const baseUrl = new URL(String(body.baseUrl)).toString().replace(/\/$/, '')
     await databasePool().query(

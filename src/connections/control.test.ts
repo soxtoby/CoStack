@@ -61,6 +61,25 @@ describe('/api/control action authorization', () => {
     )
   })
 
+  test('reserves connection deletion for connection managers', () => {
+    expect(controlActionAccess('delete-connection')).toBe('manage_connections')
+    expect(mayPerformControlAction(principal(), 'delete-connection')).toBe(
+      false,
+    )
+    expect(
+      mayPerformControlAction(
+        principal(['manage_accounts']),
+        'delete-connection',
+      ),
+    ).toBe(false)
+    expect(
+      mayPerformControlAction(
+        principal(['manage_connections']),
+        'delete-connection',
+      ),
+    ).toBe(true)
+  })
+
   test('rejects every action for a disabled Principal', () => {
     const disabled = {
       ...principal(['manage_connections', 'manage_accounts'], true),

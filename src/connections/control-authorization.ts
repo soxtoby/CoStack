@@ -11,6 +11,7 @@ export function controlActionAccess(action: string): ControlAccess | undefined {
       'set-tool-policies',
       'clone-connection',
       'set-enabled',
+      'delete-connection',
       'refresh-connection',
       'create-registry-source',
       'import-registry',

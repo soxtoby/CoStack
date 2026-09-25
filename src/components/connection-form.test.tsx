@@ -5,7 +5,26 @@ import {
   ConnectionForm,
   ConnectionSummary,
   ConnectionsEmptyState,
+  DeleteConnectionForm,
 } from './control-app'
+
+test('delete confirmation spells out what is lost and what is kept', () => {
+  const html = renderToStaticMarkup(
+    <DeleteConnectionForm
+      displayName="Linear"
+      namespace="linear"
+      cancel={() => {}}
+      confirm={() => Promise.resolve()}
+    />,
+  )
+  expect(html).toContain('Deleting <b>Linear</b>')
+  expect(html).toContain('every Shared and Personal Account')
+  expect(html).toContain('credentials belonging to other Users')
+  expect(html).toContain('Audit records are kept.')
+  expect(html).toContain('<code>linear__*</code>')
+  expect(html).toContain('>Cancel</button>')
+  expect(html).toContain('Delete connection')
+})
 
 test('empty connections explain the available next step', () => {
   expect(

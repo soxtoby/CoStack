@@ -175,6 +175,19 @@ export class ConnectionManager {
     return result.rows[0].revision as number
   }
 
+  /**
+   * Removes a connection together with its Accounts, Tool Policies, Group
+   * access, and tool inventory. Audit records keep their history.
+   */
+  async delete(id: string) {
+    const result = await this.pool.query(
+      'DELETE FROM mcp_connections WHERE id=$1',
+      [id],
+    )
+    if (result.rowCount !== 1) throw new Error('Connection not found')
+    await this.restartConnection(id)
+  }
+
   async addAccount(input: {
     connectionId: string
     kind: 'shared' | 'personal'
