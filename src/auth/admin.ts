@@ -43,6 +43,7 @@ export async function adminHandler(request: Request) {
     if (action === 'create-group') return createGroup(body)
     if (action === 'create-access') return createAccess(body)
     if (action === 'revoke-access') return revokeAccess(body)
+    if (action === 'delete-access') return deleteAccess(body)
     if (action === 'set-membership') return setMembership(request, body)
     if (action === 'set-capabilities') return setCapabilities(request, body)
     if (action === 'set-disabled') return setDisabled(request, body)
@@ -101,7 +102,7 @@ async function snapshot(request: Request) {
           FROM groups g LEFT JOIN group_capabilities gc ON gc.group_id=g.id GROUP BY g.id ORDER BY g.is_administrators DESC,g.display_name`)
         : Promise.resolve({ rows: [] }),
       canManage
-        ? pool.query(`SELECT p.id,p.normalized_email,p.expires_at,p.claimed_at,p.revoked_at,
+        ? pool.query(`SELECT p.id,p.normalized_email,p.claimed_at,p.revoked_at,
           COALESCE(array_agg(pg.group_id) FILTER (WHERE pg.group_id IS NOT NULL), '{}') AS group_ids
           FROM pre_provisioned_access p LEFT JOIN pre_provisioned_access_groups pg ON pg.access_id=p.id
           GROUP BY p.id ORDER BY p.created_at DESC`)
@@ -177,6 +178,14 @@ async function createAccess(body: Record<string, unknown>) {
 async function revokeAccess(body: Record<string, unknown>) {
   await databasePool().query(
     'UPDATE pre_provisioned_access SET revoked_at=now() WHERE id=$1 AND claimed_at IS NULL',
+    [String(body.id)],
+  )
+  return Response.json({ ok: true })
+}
+
+async function deleteAccess(body: Record<string, unknown>) {
+  await databasePool().query(
+    'DELETE FROM pre_provisioned_access WHERE id=$1 AND revoked_at IS NOT NULL',
     [String(body.id)],
   )
   return Response.json({ ok: true })

@@ -47,6 +47,7 @@ describe('database schema', () => {
       { name: '0011_annotation_policies.sql' },
       { name: '0012_remove_builtin_tools.sql' },
       { name: '0013_account_variables.sql' },
+      { name: '0014_remove_access_expiry.sql' },
     ])
   })
 

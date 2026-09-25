@@ -73,7 +73,6 @@ type Data = {
   access?: Array<{
     id: string
     normalized_email: string
-    expires_at: string
     claimed_at: string | null
     revoked_at: string | null
     group_ids: Array<string>
@@ -1740,7 +1739,7 @@ export function Users({ data, reload }: View) {
                     ? 'Claimed'
                     : x.revoked_at
                       ? 'Revoked'
-                      : `Expires ${new Date(x.expires_at).toLocaleDateString()}`}
+                      : 'Pending'}
                 </small>
               </div>
               <Chips
@@ -1756,6 +1755,16 @@ export function Users({ data, reload }: View) {
                   }
                 >
                   Revoke
+                </button>
+              )}
+              {x.revoked_at && (
+                <button
+                  className="danger"
+                  onClick={() =>
+                    act('delete-access', { id: x.id }).then(reload)
+                  }
+                >
+                  Remove
                 </button>
               )}
             </article>

@@ -10,10 +10,9 @@ export async function grantAccess(
   try {
     await client.query('BEGIN')
     const access = await client.query<{ id: string }>(
-      `INSERT INTO pre_provisioned_access(id,organization_id,normalized_email,expires_at)
-       VALUES($1,$2,$3,now()+interval '7 days')
+      `INSERT INTO pre_provisioned_access(id,organization_id,normalized_email)
+       VALUES($1,$2,$3)
        ON CONFLICT (organization_id,normalized_email) DO UPDATE SET
-         expires_at=EXCLUDED.expires_at,
          revoked_at=NULL
        WHERE pre_provisioned_access.claimed_at IS NULL
        RETURNING id`,

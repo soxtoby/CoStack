@@ -102,7 +102,7 @@ export async function claimPreProvisionedAccess(
       const prepared = await client.query(
         `SELECT id FROM pre_provisioned_access
          WHERE organization_id = $1 AND normalized_email = lower(trim($2))
-           AND claimed_at IS NULL AND revoked_at IS NULL AND expires_at > now()
+           AND claimed_at IS NULL AND revoked_at IS NULL
          FOR UPDATE`,
         [organizationId, user.email],
       )
@@ -133,7 +133,7 @@ export async function claimPreProvisionedAccess(
       `UPDATE pre_provisioned_access
        SET claimed_by_user_id = $1, claimed_at = now()
        WHERE organization_id = $2 AND normalized_email = lower(trim($3))
-         AND claimed_at IS NULL AND revoked_at IS NULL AND expires_at > now()
+         AND claimed_at IS NULL AND revoked_at IS NULL
        RETURNING id`,
       [user.id, organizationId, user.email],
     )
