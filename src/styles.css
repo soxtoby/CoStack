@@ -835,6 +835,20 @@ fieldset {
 }
 
 /* ---------- connections ---------- */
+.agent-setup {
+  margin-bottom: 16px;
+}
+.agent-setup > h2 {
+  margin: 0 0 8px;
+  font-size: 13px;
+  color: var(--text-strong);
+}
+.agent-setup > .note {
+  margin: -4px 0 8px;
+}
+.agent-setup > .sign-in-link {
+  margin-bottom: 0;
+}
 .connection-list {
   border: 1px solid var(--line);
   border-radius: var(--radius);

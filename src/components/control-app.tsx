@@ -328,6 +328,7 @@ export function Connections({ data }: { data: Data }) {
         </>
       }
     >
+      <AgentSetup />
       <div className="connection-list">
         {control.connections.length === 0 && (
           <ConnectionsEmptyState canAdd={Boolean(canConnections)} />
@@ -357,6 +358,37 @@ export function Connections({ data }: { data: Data }) {
         })}
       </div>
     </Page>
+  )
+}
+
+function AgentSetup() {
+  const [mcpUrl, setMcpUrl] = useState('')
+  const [copied, setCopied] = useState(false)
+  useEffect(() => setMcpUrl(`${location.origin}/mcp`), [])
+  return (
+    <section className="agent-setup">
+      <h2>Add CoStack to your agent</h2>
+      <p className="note">
+        Add a remote MCP server using the <b>Streamable HTTP</b> transport with
+        this URL. Choose <b>OAuth</b> authentication and leave the client ID and
+        secret blank; the agent registers itself and you sign in with your
+        CoStack account.
+      </p>
+      <div className="sign-in-link">
+        <code>{mcpUrl || 'Loading MCP URL…'}</code>
+        <button
+          className="secondary"
+          type="button"
+          disabled={!mcpUrl}
+          onClick={async () => {
+            await navigator.clipboard.writeText(mcpUrl)
+            setCopied(true)
+          }}
+        >
+          {copied ? 'Copied' : 'Copy MCP URL'}
+        </button>
+      </div>
+    </section>
   )
 }
 
