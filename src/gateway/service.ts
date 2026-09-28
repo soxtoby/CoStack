@@ -167,11 +167,8 @@ export class GatewayService {
     let tool: GatewayTool | undefined
     try {
       tool = await this.resolve(principal, target)
-      if (!tool.available)
-        throw new GatewayError(
-          'Upstream MCP is unavailable',
-          'connection_unavailable',
-        )
+      // Discovery health may come from an anonymous background probe; it
+      // cannot determine whether the selected Account can execute a tool.
       if (tool.policy === 'require_approval') {
         if (principal.kind === 'service_account')
           throw new GatewayError(

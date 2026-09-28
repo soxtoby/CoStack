@@ -3,6 +3,7 @@ import { PGlite } from '@electric-sql/pglite'
 import { PGLiteSocketServer } from '@electric-sql/pglite-socket'
 import { Pool } from 'pg'
 import { migrate } from '../database/migrate'
+import { GatewayService } from '../gateway/service'
 import { ConnectionManager, RevisionConflictError } from './manager'
 import { SecretVault } from './secrets'
 import type { UpstreamClient } from './upstream'
@@ -528,6 +529,67 @@ describe('ConnectionManager', () => {
     )
     expect(health.rows[0].error).toBe('missing_scope')
     await authenticated.close()
+  })
+
+  test('personal Account calls survive an unauthenticated background refresh', async () => {
+    const authenticated = new ConnectionManager(
+      pool,
+      vault,
+      (_config, secrets) => {
+        if (!secrets.Authorization)
+          return Promise.reject(new Error('authentication required'))
+        return Promise.resolve(fake)
+      },
+    )
+    const created = await authenticated.create({
+      organizationId: 'org',
+      displayName: 'Background refresh',
+      transport: { kind: 'streamable_http', url: 'https://mcp.example.test' },
+      groupIds: ['group'],
+      policies: [{ pattern: '*', effect: 'allow' }],
+      state: 'enabled',
+    })
+    try {
+      const account = await authenticated.addAccount({
+        connectionId: created.id,
+        kind: 'personal',
+        ownerUserId: 'one',
+        displayName: 'Mine',
+        secrets: { Authorization: 'personal' },
+      })
+      await pool.query(
+        "INSERT INTO group_memberships(group_id,principal_id) VALUES ('group','one') ON CONFLICT DO NOTHING",
+      )
+      await authenticated.refreshConnection(created.id, 'one')
+      await pool.query(
+        "UPDATE connection_health SET checked_at=now() - interval '7 hours' WHERE connection_id=$1",
+        [created.id],
+      )
+      await authenticated.refreshDue()
+      const health = await pool.query(
+        'SELECT healthy,error FROM connection_health WHERE connection_id=$1',
+        [created.id],
+      )
+      expect(health.rows[0]).toEqual({
+        healthy: false,
+        error: 'authentication required',
+      })
+      const service = new GatewayService(pool, authenticated)
+      const result = await service.call(
+        { id: 'one', organizationId: 'org', kind: 'user', displayName: 'One' },
+        {
+          connectionId: created.id,
+          accountId: account.id,
+          toolName: 'read_issue',
+        },
+        { issue: 'DEV-133' },
+        'ordinary',
+      )
+      expect(result).toEqual({ args: { issue: 'DEV-133' } })
+    } finally {
+      await authenticated.close()
+      await pool.query('DELETE FROM mcp_connections WHERE id=$1', [created.id])
+    }
   })
 
   test("never uses another user's Personal Account for discovery", async () => {
