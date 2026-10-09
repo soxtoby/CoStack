@@ -32,6 +32,14 @@ docker run --rm -p 3000:3000 --env-file .env costack
 
 The image pins Bun and the .NET SDK, runs as a non-root user, and supports exact-version Bun/npm and .NET STDIO MCP commands. `/health` is a process health check. Container termination stops accepting requests, closes upstream MCP clients, then closes PostgreSQL. The image is suitable for Azure Container Apps; Azure resource definitions are outside this repository.
 
+### Logging
+
+Server logs use Sonant's console sink at Information level and above. Azure Container Apps captures this output in its console log stream.
+
+Set `SEQ_URL` to the Seq server's base URL to also send the same structured events to Seq. Set `SEQ_API_KEY` if the Seq server requires an ingestion key; provide it as a Container App secret. Without `SEQ_URL`, logging uses only the console. Events include `Application: CoStack`.
+
+Seq delivery failures are reported to the console. Graceful shutdown closes the logger and flushes buffered Seq events after the server and database stop. Audit records remain in PostgreSQL.
+
 ### Entra-only PostgreSQL
 
 Enable a managed identity on the Container App and have a PostgreSQL Entra administrator create a database role for that identity. Grant it `CONNECT` on the application database and `USAGE, CREATE` on its `public` schema so startup migrations can create and update the application's tables. Do not grant the application server administrator privileges.

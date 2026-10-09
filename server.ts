@@ -2,6 +2,7 @@
 // @ts-expect-error Production output does not exist before `bun run build`.
 import serverEntry from './dist/server/server.js'
 import { healthResponse } from './src/server/health'
+import { logger } from './src/server/logging'
 import { migrate } from './src/database/migrate'
 import { authHandler } from './src/auth/auth'
 import { setupHandler } from './src/auth/setup'
@@ -30,6 +31,10 @@ export function createProductionServer() {
   return Bun.serve({
     hostname: Bun.env.HOST ?? '0.0.0.0',
     port,
+    error(error) {
+      logger.error(error, 'Unhandled request failure')
+      return new Response('Internal Server Error', { status: 500 })
+    },
     async fetch(request) {
       const url = new URL(request.url)
       if (url.pathname === '/health') return healthResponse()
@@ -71,7 +76,12 @@ if (import.meta.main) {
       void Promise.all([
         refreshDueConnections(),
         pruneAudit(databasePool()),
-      ]).catch(console.error),
+      ]).catch((error: unknown) =>
+        logger.error(
+          new Error('Background maintenance failed', { cause: error }),
+          'Background maintenance failed',
+        ),
+      ),
     6 * 60 * 60 * 1000,
   )
   let stopping = false
@@ -79,11 +89,30 @@ if (import.meta.main) {
     if (stopping) return
     stopping = true
     clearInterval(refreshTimer)
-    await server.stop(false)
-    await Promise.allSettled([closeGateway(), closeConnectionControl()])
-    await closeDatabasePool()
+    logger.info('CoStack shutting down')
+    try {
+      await server.stop(false)
+      await Promise.allSettled([closeGateway(), closeConnectionControl()])
+      await closeDatabasePool()
+      logger.info('CoStack stopped')
+    } catch (error) {
+      logger.error(
+        new Error('Shutdown failed', { cause: error }),
+        'CoStack shutdown failed',
+      )
+      process.exitCode = 1
+    } finally {
+      await logger
+        .close()
+        .catch((error: unknown) =>
+          logger.error(
+            new Error('Logging shutdown failed', { cause: error }),
+            'Failed to flush logs during shutdown',
+          ),
+        )
+    }
   }
   process.once('SIGTERM', () => void shutdown())
   process.once('SIGINT', () => void shutdown())
-  console.log(`CoStack listening on ${server.url}`)
+  logger.info('CoStack listening on {Url}', { Url: server.url.toString() })
 }
