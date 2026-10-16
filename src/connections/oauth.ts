@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { auth } from '@modelcontextprotocol/sdk/client/auth.js'
+import { checkResourceAllowed } from '@modelcontextprotocol/sdk/shared/auth-utils.js'
 import { loadAuthorization, may } from '../auth/authorization'
 import type {
   OAuthClientProvider,
@@ -299,6 +300,24 @@ class DatabaseOAuthProvider implements OAuthClientProvider {
     return this.flow.discovery
       ? (JSON.parse(this.flow.discovery) as OAuthDiscoveryState)
       : undefined
+  }
+  validateResourceURL(serverUrl: string | URL, resource?: string) {
+    if (!resource) return Promise.resolve(undefined)
+    if (
+      !checkResourceAllowed({
+        requestedResource: serverUrl,
+        configuredResource: resource,
+      })
+    )
+      throw new Error(
+        `Protected resource ${resource} does not match ${serverUrl}`,
+      )
+    const selected = new URL(resource)
+    // Azure DevOps advertises an organization URL, but Entra selects its
+    // service-wide audience through the fully qualified scope.
+    return Promise.resolve(
+      selected.origin === 'https://mcp.dev.azure.com' ? undefined : selected,
+    )
   }
   async invalidateCredentials(
     scope: 'all' | 'client' | 'tokens' | 'verifier' | 'discovery',

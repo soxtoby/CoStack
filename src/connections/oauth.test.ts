@@ -1,4 +1,8 @@
-import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
+import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test'
+import {
+  auth,
+  selectResourceURL,
+} from '@modelcontextprotocol/sdk/client/auth.js'
 import { PGlite } from '@electric-sql/pglite'
 import { PGLiteSocketServer } from '@electric-sql/pglite-socket'
 import { Pool } from 'pg'
@@ -312,8 +316,10 @@ describe('upstream OAuth', () => {
     expect(authorization.searchParams.get('redirect_uri')).toBe(
       'http://gateway.test/api/upstream-oauth/callback',
     )
+    expect(authorization.searchParams.get('resource')).toBe(`${oauthBase}mcp`)
     await oauth.finish(authorization.searchParams.get('state')!, 'code')
     expect(tokenRequest.get('code_verifier')).toBeTruthy()
+    expect(tokenRequest.get('resource')).toBe(`${oauthBase}mcp`)
     const stored = await pool.query(
       'SELECT secret_ciphertext FROM mcp_accounts WHERE id=$1',
       [account.id],
@@ -325,9 +331,126 @@ describe('upstream OAuth', () => {
       access_token: 'access',
       refresh_token: 'refresh',
     })
+    expect(
+      await auth(await oauth.provider(account.id), {
+        serverUrl: `${oauthBase}mcp`,
+      }),
+    ).toBe('AUTHORIZED')
+    expect(tokenRequest.get('grant_type')).toBe('refresh_token')
+    expect(tokenRequest.get('resource')).toBe(`${oauthBase}mcp`)
+    await expect(
+      selectResourceURL(`${oauthBase}mcp`, await oauth.provider(account.id), {
+        resource: 'https://mcp.dev.azure.com/contoso',
+      }),
+    ).rejects.toThrow('does not match')
     await expect(
       oauth.finish(authorization.searchParams.get('state')!, 'code'),
     ).rejects.toThrow('invalid or expired')
+  })
+
+  test('authorizes and refreshes Azure DevOps using its service-wide scope', async () => {
+    const serverUrl = 'https://mcp.dev.azure.com/contoso'
+    const authority = 'https://login.microsoftonline.com/organization-tenant'
+    const scope = 'https://mcp.dev.azure.com/.default offline_access'
+    const connection = await manager.create({
+      organizationId: 'org',
+      displayName: 'Azure DevOps MCP',
+      transport: { kind: 'streamable_http', url: serverUrl },
+      groupIds: [],
+      policies: [],
+      state: 'disabled',
+    })
+    const account = await manager.addAccount({
+      connectionId: connection.id,
+      kind: 'personal',
+      ownerUserId: 'user',
+      displayName: 'Azure DevOps',
+    })
+    const oauth = new UpstreamOAuth(pool, vault, 'http://gateway.test')
+    await oauth.configureConnection(connection.id, {
+      clientId: 'azure-client',
+      clientSecret: 'secret',
+      scope,
+    })
+    const grants: Array<string | null> = []
+    const entraFetch = Object.assign(
+      async (
+        input: Parameters<typeof fetch>[0],
+        init?: Parameters<typeof fetch>[1],
+      ) => {
+        const request = new Request(input, init)
+        const url = new URL(request.url)
+        if (
+          url.href ===
+          'https://mcp.dev.azure.com/.well-known/oauth-protected-resource/contoso'
+        )
+          return Response.json({
+            resource: serverUrl,
+            authorization_servers: [`${authority}/v2.0`],
+            scopes_supported: ['https://mcp.dev.azure.com/.default'],
+          })
+        if (url.href === `${authority}/v2.0/.well-known/openid-configuration`)
+          return Response.json({
+            issuer: `${authority}/v2.0`,
+            authorization_endpoint: `${authority}/oauth2/v2.0/authorize`,
+            token_endpoint: `${authority}/oauth2/v2.0/token`,
+            jwks_uri: `${authority}/discovery/v2.0/keys`,
+            subject_types_supported: ['pairwise'],
+            id_token_signing_alg_values_supported: ['RS256'],
+            response_types_supported: ['code'],
+            token_endpoint_auth_methods_supported: ['client_secret_basic'],
+          })
+        if (url.href.startsWith(`${authority}/oauth2/v2.0/`)) {
+          const parameters = url.pathname.endsWith('/authorize')
+            ? url.searchParams
+            : new URLSearchParams(await request.text())
+          const resource = parameters.get('resource')
+          if (resource && resource !== 'https://mcp.dev.azure.com')
+            return Response.json(
+              {
+                error: 'invalid_target',
+                error_description:
+                  "AADSTS9010010: The resource parameter provided in the request doesn't match with the requested scopes.",
+              },
+              { status: 400 },
+            )
+          if (url.pathname.endsWith('/authorize'))
+            return Response.json({ authorized: true })
+          grants.push(parameters.get('grant_type'))
+          return Response.json({
+            access_token: `azure-access-${grants.length}`,
+            refresh_token: `azure-refresh-${grants.length}`,
+            token_type: 'Bearer',
+            expires_in: 3600,
+          })
+        }
+        return new Response('not found', { status: 404 })
+      },
+      { preconnect: fetch.preconnect },
+    )
+    const requests = spyOn(globalThis, 'fetch').mockImplementation(entraFetch)
+    try {
+      const started = await oauth.start(account.id, 'user')
+      const authorization = new URL(started.authorizationUrl)
+      expect(authorization.pathname).toBe(
+        '/organization-tenant/oauth2/v2.0/authorize',
+      )
+      expect(authorization.searchParams.get('scope')).toBe(scope)
+      expect(await (await fetch(authorization)).json()).toEqual({
+        authorized: true,
+      })
+      await oauth.finish(authorization.searchParams.get('state')!, 'code')
+      expect(await auth(await oauth.provider(account.id), { serverUrl })).toBe(
+        'AUTHORIZED',
+      )
+      expect(grants).toEqual(['authorization_code', 'refresh_token'])
+      expect(await (await oauth.provider(account.id)).tokens()).toMatchObject({
+        access_token: 'azure-access-2',
+        refresh_token: 'azure-refresh-2',
+      })
+    } finally {
+      requests.mockRestore()
+    }
   })
 
   test('an Administrator can authorize a Shared Account without explicit capabilities or Connection access', async () => {

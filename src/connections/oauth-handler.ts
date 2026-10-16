@@ -25,6 +25,17 @@ export async function upstreamOAuthHandler(
     return Response.json(await oauth.startOAuth(body.accountId, principalId))
   }
   if (request.method === 'GET' && url.pathname.endsWith('/callback')) {
+    const providerError = url.searchParams.get('error')
+    if (providerError) {
+      const description = url.searchParams.get('error_description')
+      return Response.json(
+        {
+          error: providerError,
+          ...(description ? { error_description: description } : {}),
+        },
+        { status: 400 },
+      )
+    }
     const state = url.searchParams.get('state')
     const code = url.searchParams.get('code')
     if (!state || !code)
