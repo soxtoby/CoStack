@@ -99,7 +99,10 @@ beforeAll(async () => {
   await pool.query(
     "INSERT INTO group_capabilities (group_id, capability_name) VALUES ('managers', 'manage_accounts')",
   )
-  for (const id of ['manager', 'user', 'other']) {
+  await pool.query(
+    "INSERT INTO groups (id, organization_id, display_name, is_administrators) VALUES ('administrators', 'org', 'Administrators', true)",
+  )
+  for (const id of ['administrator', 'manager', 'user', 'other']) {
     await pool.query(
       "INSERT INTO principals (id, organization_id, kind, display_name) VALUES ($1,'org','user',$1)",
       [id],
@@ -111,6 +114,9 @@ beforeAll(async () => {
   }
   await pool.query(
     "INSERT INTO group_memberships (group_id, principal_id) VALUES ('managers','manager')",
+  )
+  await pool.query(
+    "INSERT INTO group_memberships (group_id, principal_id) VALUES ('administrators','administrator')",
   )
 })
 
@@ -324,7 +330,32 @@ describe('upstream OAuth', () => {
     ).rejects.toThrow('invalid or expired')
   })
 
-  test('only an Account manager may authorize a Shared Account', async () => {
+  test('an Administrator can authorize a Shared Account without explicit capabilities or Connection access', async () => {
+    const connection = await manager.create({
+      organizationId: 'org',
+      displayName: 'Administrator OAuth',
+      transport: { kind: 'streamable_http', url: `${oauthBase}mcp` },
+      groupIds: [],
+      policies: [],
+      state: 'disabled',
+    })
+    const account = await manager.addAccount({
+      connectionId: connection.id,
+      kind: 'shared',
+      displayName: 'Administrator shared account',
+    })
+    const oauth = new UpstreamOAuth(pool, vault, 'http://gateway.test')
+    const started = await oauth.start(account.id, 'administrator')
+    const authorization = new URL(started.authorizationUrl)
+    expect(authorization.pathname).toBe('/authorize')
+    await oauth.finish(authorization.searchParams.get('state')!, 'code')
+    expect(await (await oauth.provider(account.id)).tokens()).toMatchObject({
+      access_token: 'access',
+      refresh_token: 'refresh',
+    })
+  })
+
+  test('a non-administrator needs manage_accounts to authorize a Shared Account', async () => {
     const connectionId = (
       await pool.query(
         "SELECT id FROM mcp_connections WHERE namespace='oauth_mcp'",

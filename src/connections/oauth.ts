@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { auth } from '@modelcontextprotocol/sdk/client/auth.js'
+import { loadAuthorization, may } from '../auth/authorization'
 import type {
   OAuthClientProvider,
   OAuthDiscoveryState,
@@ -176,15 +177,10 @@ export class UpstreamOAuth {
     const result = await this.pool.query(
       `SELECT a.id account_id, a.kind, a.owner_user_id, c.id connection_id,
               c.transport_config, c.oauth_client_ciphertext,
-              c.oauth_client_nonce, c.oauth_client_format_version,
-              EXISTS (
-                SELECT 1 FROM group_memberships gm
-                JOIN group_capabilities gc ON gc.group_id=gm.group_id
-                WHERE gm.principal_id=$2 AND gc.capability_name='manage_accounts'
-              ) can_manage
+              c.oauth_client_nonce, c.oauth_client_format_version
        FROM mcp_accounts a JOIN mcp_connections c ON c.id=a.connection_id
        WHERE a.id=$1`,
-      [accountId, principalId ?? null],
+      [accountId],
     )
     const row = result.rows[0]
     if (!row) throw new Error('Account not found')
@@ -194,8 +190,11 @@ export class UpstreamOAuth {
       row.owner_user_id !== principalId
     )
       throw new Error('Personal Account belongs to another User')
-    if (principalId && row.kind === 'shared' && !row.can_manage)
-      throw new Error('Shared Account authorization requires manage_accounts')
+    if (principalId && row.kind == 'shared') {
+      const authorization = await loadAuthorization(principalId, this.pool)
+      if (!authorization || !may(authorization, 'manage_accounts'))
+        throw new Error('Shared Account authorization requires manage_accounts')
+    }
     const transport = row.transport_config as { kind: string; url?: string }
     if (transport.kind !== 'streamable_http' || !transport.url)
       throw new Error('OAuth requires a Streamable HTTP Connection')
