@@ -4,6 +4,7 @@ import { PGLiteSocketServer } from '@electric-sql/pglite-socket'
 import { Pool } from 'pg'
 import { migrate } from '../database/migrate'
 import { GatewayService } from '../gateway/service'
+import { UpstreamAuthorizationRequiredError } from './authorization-failure'
 import { ConnectionManager, RevisionConflictError } from './manager'
 import { SecretVault } from './secrets'
 import type { UpstreamClient } from './upstream'
@@ -634,4 +635,68 @@ describe('ConnectionManager', () => {
     expect(attempts).toEqual(['personal'])
     await authenticated.close()
   })
+
+  test('when the upstream rejects an Account, records why', async () => {
+    const { sut, connectionId, accountId } =
+      await managerWithRejectingUpstream('Rejecting upstream')
+    try {
+      await expect(
+        sut.callAccountTool(connectionId, accountId, 'read_issue', {}),
+      ).rejects.toThrow('Token revoked upstream')
+
+      expect(await sut.visibleAccounts(connectionId, 'one')).toMatchObject([
+        { id: accountId, authorizationError: 'Token revoked upstream' },
+      ])
+    } finally {
+      await sut.close()
+    }
+  })
+
+  test('when a rejected Account gets new credentials, clears the recorded reason', async () => {
+    const { sut, connectionId, accountId } = await managerWithRejectingUpstream(
+      'Recovering upstream',
+    )
+    try {
+      await sut
+        .callAccountTool(connectionId, accountId, 'read_issue', {})
+        .catch(() => undefined)
+
+      await sut.replaceAccountSecrets(accountId, { Authorization: 'rotated' })
+
+      expect(
+        (await sut.visibleAccounts(connectionId, 'one'))[0]?.authorizationError,
+      ).toBeUndefined()
+    } finally {
+      await sut.close()
+    }
+  })
+
+  async function managerWithRejectingUpstream(displayName: string) {
+    const sut = new ConnectionManager(pool, vault, () =>
+      Promise.resolve({
+        listTools: () =>
+          Promise.resolve([{ name: 'read_issue', inputSchema: {} }]),
+        callTool: () =>
+          Promise.reject(
+            new UpstreamAuthorizationRequiredError('Token revoked upstream'),
+          ),
+        close: () => Promise.resolve(),
+      }),
+    )
+    const created = await sut.create({
+      organizationId: 'org',
+      displayName,
+      transport: { kind: 'streamable_http', url: 'https://mcp.example.test' },
+      groupIds: ['group'],
+      policies: [{ pattern: '*', effect: 'allow' }],
+      state: 'enabled',
+    })
+    const account = await sut.addAccount({
+      connectionId: created.id,
+      kind: 'shared',
+      displayName: 'Team',
+      secrets: { Authorization: 'secret' },
+    })
+    return { sut, connectionId: created.id, accountId: account.id }
+  }
 })

@@ -1,8 +1,14 @@
 import { randomUUID } from 'node:crypto'
+import { asError, logger } from '../server/logging'
 import { deriveNamespace } from './namespace'
 import { policyFromRow, validateToolPolicy } from './policy'
 import { McpUpstreamClient, validateHttpUrl } from './upstream'
 import { UpstreamOAuth } from './oauth'
+import { withoutOAuthState } from './oauth-provider'
+import {
+  UpstreamAuthorizationRequiredError,
+  recordAuthorizationFailure,
+} from './authorization-failure'
 import type { OAuthClientProvider } from '@modelcontextprotocol/sdk/client/auth.js'
 import type { SecretVault } from './secrets'
 import type { UpstreamClient } from './upstream'
@@ -250,7 +256,7 @@ export class ConnectionManager {
   async visibleAccounts(connectionId: string, userId: string) {
     const result = await this.pool.query(
       `SELECT id, connection_id, kind, owner_user_id, display_name, namespace,
-              secret_ciphertext IS NOT NULL AS has_secret
+              secret_ciphertext IS NOT NULL AS has_secret, authorization_error
        FROM mcp_accounts
        WHERE connection_id=$1 AND (kind='shared' OR owner_user_id=$2)
        ORDER BY display_name`,
@@ -292,10 +298,7 @@ export class ConnectionManager {
 
   /** Names of an Account's stored credentials, without their values. */
   async accountSecretNames(id: string) {
-    const secrets = await this.accountSecrets(id)
-    return Object.keys(secrets).filter(
-      (name) => name !== 'oauthTokens' && name !== 'oauthClient',
-    )
+    return Object.keys(withoutOAuthState(await this.accountSecrets(id)))
   }
 
   /**
@@ -317,7 +320,8 @@ export class ConnectionManager {
     const envelope = await this.vault.seal(merged)
     const result = await this.pool.query(
       `UPDATE mcp_accounts SET secret_ciphertext=$1, secret_nonce=$2,
-       secret_format_version=$3, variables=COALESCE($5, variables), updated_at=now()
+       secret_format_version=$3, variables=COALESCE($5, variables), updated_at=now(),
+       authorization_error=NULL, authorization_failed_at=NULL
        WHERE id=$4 RETURNING connection_id`,
       [
         envelope.ciphertext,
@@ -335,8 +339,9 @@ export class ConnectionManager {
   async clearAccountSecrets(id: string) {
     const result = await this.pool.query(
       `UPDATE mcp_accounts SET secret_ciphertext=null, secret_nonce=null,
-       secret_format_version=null, updated_at=now() WHERE id=$1
-       RETURNING connection_id`,
+       secret_format_version=null, updated_at=now(),
+       authorization_error=NULL, authorization_failed_at=NULL
+       WHERE id=$1 RETURNING connection_id`,
       [id],
     )
     const row = result.rows[0]
@@ -378,6 +383,24 @@ export class ConnectionManager {
           ),
         ),
       signal,
+    ).catch(async (error: unknown) => {
+      await this.noteCallFailure(connectionId, accountId, toolName, error)
+      throw error
+    })
+  }
+
+  private async noteCallFailure(
+    connectionId: string,
+    accountId: string | undefined,
+    toolName: string,
+    error: unknown,
+  ) {
+    if (error instanceof UpstreamAuthorizationRequiredError && accountId)
+      await recordAuthorizationFailure(this.pool, accountId, error.message)
+    logger.warn(
+      asError(error),
+      'Tool {Tool} on Connection {ConnectionId} failed for Account {AccountId}',
+      { Tool: toolName, ConnectionId: connectionId, AccountId: accountId },
     )
   }
 
@@ -427,10 +450,9 @@ export class ConnectionManager {
     )
     const row = result.rows[0]
     if (!row) throw new Error('Account not found')
-    const secrets = await this.accountEnvironment(row)
-    const hasOAuth = Boolean(row.has_oauth || secrets.oauthTokens)
-    delete secrets.oauthTokens
-    delete secrets.oauthClient
+    const environment = await this.accountEnvironment(row)
+    const hasOAuth = Boolean(row.has_oauth || environment.oauthTokens)
+    const secrets = withoutOAuthState(environment)
     const provider = hasOAuth ? await this.oauth.provider(accountId) : undefined
     const client = await this.connect(config, secrets, provider)
     try {
@@ -500,10 +522,9 @@ export class ConnectionManager {
     const row = result.rows[0]
     if (!row) throw new Error('Connection or Account not found')
     if (row.state !== 'enabled') throw new Error('Connection is disabled')
-    const secrets = await this.accountEnvironment(row)
-    const hasOAuth = Boolean(row.has_oauth || secrets.oauthTokens)
-    delete secrets.oauthTokens
-    delete secrets.oauthClient
+    const environment = await this.accountEnvironment(row)
+    const hasOAuth = Boolean(row.has_oauth || environment.oauthTokens)
+    const secrets = withoutOAuthState(environment)
     const provider =
       hasOAuth && accountId ? await this.oauth.provider(accountId) : undefined
     return this.connect(
@@ -530,6 +551,11 @@ export class ConnectionManager {
         )
       })
     } catch (error) {
+      logger.warn(
+        asError(error),
+        'Tool discovery failed for Connection {ConnectionId}',
+        { ConnectionId: id },
+      )
       await this.pool.query(
         `INSERT INTO connection_health (connection_id, healthy, error)
          VALUES ($1,false,$2) ON CONFLICT (connection_id) DO UPDATE
@@ -726,6 +752,9 @@ function accountSummary(row: Record<string, unknown>): AccountSummary {
     displayName: row.display_name as string,
     namespace: row.namespace as string,
     hasSecret: row.has_secret as boolean,
+    ...(row.authorization_error
+      ? { authorizationError: row.authorization_error as string }
+      : {}),
   }
 }
 

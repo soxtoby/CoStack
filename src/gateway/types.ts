@@ -26,6 +26,7 @@ export type GatewayTool = {
   policy: Exclude<ToolPolicyEffect, 'block'>
   available: boolean
   healthError?: string
+  accountError?: string
 }
 
 export type GatewayToolTarget = Pick<

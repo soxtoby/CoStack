@@ -57,6 +57,7 @@ export class GatewayService {
               t.name tool_name, t.description, t.input_schema, t.output_schema, t.annotations,
               h.healthy, h.error health_error,
               a.id account_id, a.display_name account_name, a.namespace account_namespace, a.kind account_kind,
+              a.authorization_error account_error,
               p.pattern, p.annotation, p.effect
        FROM mcp_connections c
        JOIN connection_groups cg ON cg.connection_id=c.id
@@ -125,9 +126,12 @@ export class GatewayService {
             ? { outputSchema: row.output_schema as Record<string, unknown> }
             : {}),
           policy,
-          available: row.healthy !== false,
+          available: row.healthy !== false && !row.account_error,
           ...(row.health_error
             ? { healthError: row.health_error as string }
+            : {}),
+          ...(row.account_error
+            ? { accountError: row.account_error as string }
             : {}),
         } satisfies GatewayTool,
       ]

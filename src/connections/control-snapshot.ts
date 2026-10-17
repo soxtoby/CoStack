@@ -112,7 +112,8 @@ async function connectionDetail(
       [id],
     ),
     pool.query(
-      `SELECT id,kind,owner_user_id,display_name,namespace,variables,secret_ciphertext IS NOT NULL has_secret
+      `SELECT id,kind,owner_user_id,display_name,namespace,variables,secret_ciphertext IS NOT NULL has_secret,
+              authorization_error,authorization_failed_at
       FROM mcp_accounts WHERE connection_id=$1 AND (kind='shared' OR owner_user_id=$2) ORDER BY display_name`,
       [id, userId],
     ),

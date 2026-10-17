@@ -277,6 +277,8 @@ type ControlData = {
       display_name: string
       namespace: string
       has_secret: boolean
+      authorization_error?: string | null
+      authorization_failed_at?: string | null
       secret_names?: Array<string>
       variables?: Record<string, string>
     }>
@@ -654,9 +656,18 @@ function ConnectionDetail(p: {
               <small>
                 {a.kind} · {a.namespace}__*
               </small>
+              {a.authorization_error && (
+                <small className="error" role="alert">
+                  {a.authorization_error}
+                </small>
+              )}
             </div>
-            <Status ok={a.has_secret}>
-              {a.has_secret ? 'Ready' : 'Needs credentials'}
+            <Status ok={a.has_secret && !a.authorization_error}>
+              {!a.has_secret
+                ? 'Needs credentials'
+                : a.authorization_error
+                  ? 'Needs re-authorization'
+                  : 'Ready'}
             </Status>
             <button className="secondary" onClick={() => setCredentials(a.id)}>
               Reconfigure

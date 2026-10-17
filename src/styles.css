@@ -723,6 +723,9 @@ fieldset {
   margin-top: 2px;
   overflow-wrap: anywhere;
 }
+.account-cards small.error {
+  color: var(--danger);
+}
 .modal {
   width: min(560px, calc(100vw - 32px));
   max-height: calc(100vh - 48px);

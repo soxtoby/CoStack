@@ -1,7 +1,11 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
-import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
+import {
+  StreamableHTTPClientTransport,
+  StreamableHTTPError,
+} from '@modelcontextprotocol/sdk/client/streamableHttp.js'
 import { ErrorCode, McpError } from '@modelcontextprotocol/sdk/types.js'
+import { UpstreamAuthorizationRequiredError } from './authorization-failure'
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js'
 import type { OAuthClientProvider } from '@modelcontextprotocol/sdk/client/auth.js'
 import type { DiscoveredTool, TransportConfig } from './types'
@@ -57,19 +61,22 @@ export class McpUpstreamClient implements UpstreamClient {
       const headers = new Headers(config.headers)
       for (const [name, value] of Object.entries(secrets))
         headers.set(name, value)
-      await client.connect(
-        new StreamableHTTPClientTransport(new URL(config.url), {
-          ...(authProvider ? { authProvider } : {}),
-          requestInit: { headers, redirect: 'manual' },
-          fetch: sameOriginFetch,
-          reconnectionOptions: {
-            initialReconnectionDelay: 1_000,
-            maxReconnectionDelay: 1_000,
-            reconnectionDelayGrowFactor: 1,
-            maxRetries: 1,
-          },
-        }) as unknown as Transport,
-      )
+      const transport = new StreamableHTTPClientTransport(new URL(config.url), {
+        ...(authProvider ? { authProvider } : {}),
+        requestInit: { headers, redirect: 'manual' },
+        fetch: sameOriginFetch,
+        reconnectionOptions: {
+          initialReconnectionDelay: 1_000,
+          maxReconnectionDelay: 1_000,
+          reconnectionDelayGrowFactor: 1,
+          maxRetries: 1,
+        },
+      }) as unknown as Transport
+      try {
+        await client.connect(transport)
+      } catch (error) {
+        throw explainRejection(error)
+      }
     }
     return new McpUpstreamClient(client)
   }
@@ -78,7 +85,7 @@ export class McpUpstreamClient implements UpstreamClient {
     const result = await this.client
       .listTools(undefined, signal ? { signal } : undefined)
       .catch((error: unknown) => {
-        throw this.stderr?.explain(error) ?? error
+        throw this.explain(error)
       })
     return result.tools.map((tool) => ({
       name: tool.name,
@@ -97,13 +104,30 @@ export class McpUpstreamClient implements UpstreamClient {
         signal ? { signal } : undefined,
       )
       .catch((error: unknown) => {
-        throw this.stderr?.explain(error) ?? error
+        throw this.explain(error)
       })
   }
 
   close() {
     return this.client.close()
   }
+
+  private explain(error: unknown) {
+    return this.stderr ? this.stderr.explain(error) : explainRejection(error)
+  }
+}
+
+/**
+ * Without an OAuth provider the SDK cannot re-authorize, so a 401 surfaces as
+ * a bare transport error; name the remedy instead.
+ */
+function explainRejection(error: unknown) {
+  return error instanceof StreamableHTTPError && error.code === 401
+    ? new UpstreamAuthorizationRequiredError(
+        "The upstream server rejected the Account's credentials (HTTP 401); re-authorize or reconfigure the Account in CoStack",
+        { cause: error },
+      )
+    : error
 }
 
 /**

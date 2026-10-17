@@ -1,28 +1,14 @@
 import { randomUUID } from 'node:crypto'
 import { auth } from '@modelcontextprotocol/sdk/client/auth.js'
-import { checkResourceAllowed } from '@modelcontextprotocol/sdk/shared/auth-utils.js'
 import { loadAuthorization, may } from '../auth/authorization'
-import type {
-  OAuthClientProvider,
-  OAuthDiscoveryState,
-} from '@modelcontextprotocol/sdk/client/auth.js'
-import type {
-  OAuthClientInformationMixed,
-  OAuthClientMetadata,
-  OAuthTokens,
-} from '@modelcontextprotocol/sdk/shared/auth.js'
+import { DatabaseOAuthProvider } from './oauth-provider'
+import { envelopeFrom, toStrings } from './secrets'
 import type { Pool } from 'pg'
-import type { SecretEnvelope, SecretVault } from './secrets'
+import type { OAuthContext, StoredAuthorization } from './oauth-provider'
+import type { SecretVault } from './secrets'
 import type { OAuthClientConfig, OAuthClientSummary } from './types'
 
 const FLOW_LIFETIME_MS = 10 * 60 * 1000
-
-type StoredAuthorization = {
-  client?: string
-  verifier?: string
-  tokens?: string
-  discovery?: string
-}
 
 export class UpstreamOAuth {
   constructor(
@@ -176,7 +162,7 @@ export class UpstreamOAuth {
     principalId?: string,
   ): Promise<OAuthContext> {
     const result = await this.pool.query(
-      `SELECT a.id account_id, a.kind, a.owner_user_id, c.id connection_id,
+      `SELECT a.id account_id, a.kind, a.owner_user_id, a.display_name, c.id connection_id,
               c.transport_config, c.oauth_client_ciphertext,
               c.oauth_client_nonce, c.oauth_client_format_version
        FROM mcp_accounts a JOIN mcp_connections c ON c.id=a.connection_id
@@ -206,6 +192,7 @@ export class UpstreamOAuth {
       : undefined
     return {
       accountId,
+      displayName: row.display_name as string,
       connectionId: row.connection_id as string,
       serverUrl: transport.url,
       client,
@@ -215,186 +202,6 @@ export class UpstreamOAuth {
   private open(row: Record<string, unknown>) {
     return this.vault.open(envelopeFrom(row)) as Promise<StoredAuthorization>
   }
-}
-
-type OAuthContext = {
-  accountId: string
-  connectionId: string
-  serverUrl: string
-  client: OAuthClientConfig | undefined
-}
-
-class DatabaseOAuthProvider implements OAuthClientProvider {
-  authorizationUrl?: URL
-
-  constructor(
-    private readonly pool: Pool,
-    private readonly vault: SecretVault,
-    private readonly context: OAuthContext,
-    readonly redirectUrl: string,
-    private readonly flowState: string,
-    private flow: StoredAuthorization = {},
-  ) {}
-
-  get clientMetadata(): OAuthClientMetadata {
-    return {
-      redirect_uris: [this.redirectUrl],
-      client_name: 'CoStack',
-      grant_types: ['authorization_code', 'refresh_token'],
-      response_types: ['code'],
-      token_endpoint_auth_method: this.context.client?.clientSecret
-        ? 'client_secret_basic'
-        : 'none',
-      ...(this.context.client?.scope
-        ? { scope: this.context.client.scope }
-        : {}),
-    }
-  }
-
-  state() {
-    return this.flowState
-  }
-  async clientInformation(): Promise<OAuthClientInformationMixed | undefined> {
-    if (this.context.client)
-      return {
-        client_id: this.context.client.clientId,
-        client_secret: this.context.client.clientSecret,
-      }
-    const client = this.flow.client ?? (await this.accountSecrets()).oauthClient
-    return client
-      ? (JSON.parse(client) as OAuthClientInformationMixed)
-      : undefined
-  }
-  async saveClientInformation(client: OAuthClientInformationMixed) {
-    this.flow.client = JSON.stringify(client)
-    if (this.flowState) await this.saveFlow()
-  }
-  async tokens() {
-    const stored = await this.accountSecrets()
-    return stored.oauthTokens
-      ? (JSON.parse(stored.oauthTokens) as OAuthTokens)
-      : undefined
-  }
-  async saveTokens(tokens: OAuthTokens) {
-    const stored = await this.accountSecrets()
-    stored.oauthTokens = JSON.stringify(tokens)
-    if (this.flow.client) stored.oauthClient = this.flow.client
-    await this.saveAccountSecrets(stored)
-  }
-  redirectToAuthorization(url: URL) {
-    this.authorizationUrl = url
-  }
-  async saveCodeVerifier(verifier: string) {
-    this.flow.verifier = verifier
-    await this.saveFlow()
-  }
-  codeVerifier() {
-    if (!this.flow.verifier) throw new Error('OAuth code verifier is missing')
-    return this.flow.verifier
-  }
-  async saveDiscoveryState(discovery: OAuthDiscoveryState) {
-    this.flow.discovery = JSON.stringify(discovery)
-    if (this.flowState) await this.saveFlow()
-  }
-  discoveryState() {
-    return this.flow.discovery
-      ? (JSON.parse(this.flow.discovery) as OAuthDiscoveryState)
-      : undefined
-  }
-  validateResourceURL(serverUrl: string | URL, resource?: string) {
-    if (!resource) return Promise.resolve(undefined)
-    if (
-      !checkResourceAllowed({
-        requestedResource: serverUrl,
-        configuredResource: resource,
-      })
-    )
-      throw new Error(
-        `Protected resource ${resource} does not match ${serverUrl}`,
-      )
-    const selected = new URL(resource)
-    // Azure DevOps advertises an organization URL, but Entra selects its
-    // service-wide audience through the fully qualified scope.
-    return Promise.resolve(
-      selected.origin === 'https://mcp.dev.azure.com' ? undefined : selected,
-    )
-  }
-  async invalidateCredentials(
-    scope: 'all' | 'client' | 'tokens' | 'verifier' | 'discovery',
-  ) {
-    if (scope === 'client' || scope === 'all') {
-      delete this.flow.client
-      const stored = await this.accountSecrets()
-      delete stored.oauthClient
-      await this.saveAccountSecrets(stored)
-    }
-    if (scope === 'tokens' || scope === 'all') {
-      const stored = await this.accountSecrets()
-      delete stored.oauthTokens
-      await this.saveAccountSecrets(stored)
-    }
-    if (scope === 'verifier' || scope === 'all') delete this.flow.verifier
-    if (scope === 'discovery' || scope === 'all') delete this.flow.discovery
-  }
-
-  private async accountSecrets(): Promise<Record<string, string>> {
-    const result = await this.pool.query(
-      `SELECT secret_ciphertext, secret_nonce, secret_format_version
-       FROM mcp_accounts WHERE id=$1`,
-      [this.context.accountId],
-    )
-    const row = result.rows[0]
-    if (!row) throw new Error('Account not found')
-    return row.secret_ciphertext
-      ? this.vault.open(envelopeFrom(row))
-      : Promise.resolve({})
-  }
-
-  private async saveAccountSecrets(value: Record<string, string>) {
-    const envelope = await this.vault.seal(value)
-    await this.pool.query(
-      `UPDATE mcp_accounts SET secret_ciphertext=$1, secret_nonce=$2,
-       secret_format_version=$3, updated_at=now() WHERE id=$4`,
-      [
-        envelope.ciphertext,
-        envelope.nonce,
-        envelope.version,
-        this.context.accountId,
-      ],
-    )
-  }
-
-  private async saveFlow() {
-    const envelope = await this.vault.seal(toStrings(this.flow))
-    const result = await this.pool.query(
-      `UPDATE upstream_oauth_flows SET secret_ciphertext=$1, secret_nonce=$2,
-       secret_format_version=$3 WHERE state=$4 AND expires_at>now()`,
-      [envelope.ciphertext, envelope.nonce, envelope.version, this.flowState],
-    )
-    if (result.rowCount !== 1)
-      throw new Error('Authorization state is invalid or expired')
-  }
-}
-
-function envelopeFrom(row: Record<string, unknown>): SecretEnvelope {
-  const prefix = row.oauth_client_ciphertext
-    ? 'oauth_client_'
-    : row.secret_ciphertext
-      ? 'secret_'
-      : ''
-  return {
-    ciphertext: new Uint8Array(row[`${prefix}ciphertext`] as Uint8Array),
-    nonce: new Uint8Array(row[`${prefix}nonce`] as Uint8Array),
-    version: row[`${prefix}format_version`] as number,
-  }
-}
-
-function toStrings(value: Record<string, unknown>): Record<string, string> {
-  return Object.fromEntries(
-    Object.entries(value)
-      .filter(([, v]) => v !== undefined)
-      .map(([k, v]) => [k, String(v)]),
-  )
 }
 
 function fromStrings(value: Record<string, string>) {

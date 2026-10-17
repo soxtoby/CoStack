@@ -199,3 +199,35 @@ for (const [role, administrator, capabilities] of [
     }
   })
 }
+
+test('when an Account was rejected upstream, the snapshot reports why', async () => {
+  await pool.query(
+    "UPDATE mcp_accounts SET authorization_error='Refresh token expired', authorization_failed_at=now() WHERE id='shared'",
+  )
+  try {
+    const response = await connectionSnapshot(
+      pool,
+      {
+        id: 'other-user',
+        disabled: false,
+        administrator: true,
+        capabilities: new Set<Capability>(),
+      },
+      new URL('http://localhost/api/control?connection=connection'),
+      () => Promise.resolve({ rows: [] }),
+    )
+
+    const result = await response.json()
+
+    expect(result.detail.accounts).toContainEqual(
+      expect.objectContaining({
+        id: 'shared',
+        authorization_error: 'Refresh token expired',
+      }),
+    )
+  } finally {
+    await pool.query(
+      "UPDATE mcp_accounts SET authorization_error=NULL, authorization_failed_at=NULL WHERE id='shared'",
+    )
+  }
+})

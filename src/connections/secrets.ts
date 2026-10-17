@@ -65,3 +65,27 @@ export class SecretVault {
     >
   }
 }
+
+/** Reads whichever sealed column set a row carries: Account secrets or a Connection OAuth client. */
+export function envelopeFrom(row: Record<string, unknown>): SecretEnvelope {
+  const prefix = row.oauth_client_ciphertext
+    ? 'oauth_client_'
+    : row.secret_ciphertext
+      ? 'secret_'
+      : ''
+  return {
+    ciphertext: new Uint8Array(row[`${prefix}ciphertext`] as Uint8Array),
+    nonce: new Uint8Array(row[`${prefix}nonce`] as Uint8Array),
+    version: row[`${prefix}format_version`] as number,
+  }
+}
+
+export function toStrings(
+  value: Record<string, unknown>,
+): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(value)
+      .filter(([, v]) => v !== undefined)
+      .map(([k, v]) => [k, String(v)]),
+  )
+}

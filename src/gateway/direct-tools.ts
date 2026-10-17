@@ -30,7 +30,7 @@ export function directTools(tools: Array<GatewayTool>): Array<DirectTool> {
           `${tool.connectionName}: ${tool.description ?? tool.toolName}. ` +
           'Pass upstream parameters in arguments. ' +
           (selectors.length
-            ? `Accounts (namespace: name, kind): ${accounts.map((account) => `${account.accountNamespace}: ${account.accountName}, ${account.accountKind}`).join('; ')}. `
+            ? `Accounts (namespace: name, kind): ${accounts.map((account) => `${account.accountNamespace}: ${account.accountName}, ${account.accountKind}${account.accountError ? ' (needs re-authorization in CoStack)' : ''}`).join('; ')}. `
             : '') +
           (approval
             ? 'Requires approval. With client-managed approval, obtain user approval for this exact account and arguments before calling.'

@@ -40,6 +40,9 @@ const manager = new ConnectionManager(pool, vault, () =>
   Promise.resolve(fakeUpstream),
 )
 let tokenRequest = new URLSearchParams()
+let tokenRequests = 0
+let tokenResponse: 'granted' | 'invalid_grant' | 'unavailable' = 'granted'
+let tokenLifetime = 3600
 let oauthBase = ''
 let registrations = 0
 const oauthServer: Bun.Server<undefined> = Bun.serve({
@@ -77,14 +80,25 @@ const oauthServer: Bun.Server<undefined> = Bun.serve({
     }
     if (url.pathname === '/token') {
       tokenRequest = new URLSearchParams(await request.text())
+      tokenRequests++
       if (tokenRequest.get('client_id')?.startsWith('dynamic-')) {
         expect(request.headers.has('authorization')).toBe(false)
       } else expect(request.headers.get('authorization')).toStartWith('Basic ')
+      if (tokenResponse === 'invalid_grant')
+        return Response.json(
+          {
+            error: 'invalid_grant',
+            error_description: 'Refresh token expired',
+          },
+          { status: 400 },
+        )
+      if (tokenResponse === 'unavailable')
+        return new Response('maintenance', { status: 503 })
       return Response.json({
         access_token: 'access',
         refresh_token: 'refresh',
         token_type: 'Bearer',
-        expires_in: 3600,
+        expires_in: tokenLifetime,
       })
     }
     return new Response('not found', { status: 404 })
@@ -497,4 +511,161 @@ describe('upstream OAuth', () => {
       (await oauth.start(account.id, 'manager')).authorizationUrl,
     ).toContain('/authorize?')
   })
+})
+
+describe('upstream OAuth token refresh', () => {
+  test('when the upstream rejects the refresh token, keeps the tokens and asks for re-authorization', async () => {
+    const { oauth, account, connection } =
+      await authorizedPersonalAccount('Rejected refresh')
+    const sut = await oauth.provider(account.id)
+
+    tokenResponse = 'invalid_grant'
+    try {
+      await expect(auth(sut, { serverUrl: `${oauthBase}mcp` })).rejects.toThrow(
+        'Account "Rejected refresh" needs to be re-authorized in CoStack: The upstream server rejected the refresh token',
+      )
+    } finally {
+      tokenResponse = 'granted'
+    }
+
+    expect(await storedSecrets(account.id)).toHaveProperty('oauthTokens')
+    expect(await sut.tokens()).toBeUndefined()
+    expect(await manager.visibleAccounts(connection.id, 'user')).toMatchObject([
+      { authorizationError: 'The upstream server rejected the refresh token' },
+    ])
+  })
+
+  test('when a rejected Account is re-authorized, clears the failure and serves the new tokens', async () => {
+    const { oauth, account, connection } =
+      await rejectedPersonalAccount('Re-authorized')
+
+    const started = await oauth.start(account.id, 'user')
+    await oauth.finish(
+      new URL(started.authorizationUrl).searchParams.get('state')!,
+      'code',
+    )
+
+    expect(
+      (await manager.visibleAccounts(connection.id, 'user'))[0]
+        ?.authorizationError,
+    ).toBeUndefined()
+    expect(
+      (await (await oauth.provider(account.id)).tokens())?.access_token,
+    ).toBe('access')
+  })
+
+  test('when the token is about to expire, refreshes it once for concurrent callers', async () => {
+    tokenLifetime = 0
+    const { oauth, account } = await authorizedPersonalAccount('Expiring')
+    tokenLifetime = 3600
+    tokenRequests = 0
+
+    const results = await Promise.all([
+      (await oauth.provider(account.id)).tokens(),
+      (await oauth.provider(account.id)).tokens(),
+    ])
+
+    expect(tokenRequests).toBe(1)
+    expect(tokenRequest.get('grant_type')).toBe('refresh_token')
+    expect(results.map((tokens) => tokens?.access_token)).toEqual([
+      'access',
+      'access',
+    ])
+    expect(await (await oauth.provider(account.id)).tokens()).toBeDefined()
+    expect(tokenRequests).toBe(1)
+  })
+
+  test('when the authorization server is unavailable, keeps the current token', async () => {
+    tokenLifetime = 0
+    const { oauth, account } = await authorizedPersonalAccount('Unavailable')
+    tokenLifetime = 3600
+    const sut = await oauth.provider(account.id)
+
+    tokenResponse = 'unavailable'
+    try {
+      expect((await sut.tokens())?.access_token).toBe('access')
+    } finally {
+      tokenResponse = 'granted'
+    }
+
+    expect(await authorizationError(account.id)).toBeNull()
+  })
+
+  test('when another call already replaced the tokens, ignores the stale rejection', async () => {
+    const { oauth, account } =
+      await authorizedPersonalAccount('Stale rejection')
+    const sut = await oauth.provider(account.id)
+    await sut.tokens()
+    await (
+      await oauth.provider(account.id)
+    ).saveTokens({
+      access_token: 'newer',
+      token_type: 'Bearer',
+      refresh_token: 'newer-refresh',
+    })
+
+    await sut.invalidateCredentials('tokens')
+
+    expect(await authorizationError(account.id)).toBeNull()
+    expect((await sut.tokens())?.access_token).toBe('newer')
+  })
+
+  async function authorizedPersonalAccount(displayName: string) {
+    const connection = await manager.create({
+      organizationId: 'org',
+      displayName,
+      transport: { kind: 'streamable_http', url: `${oauthBase}mcp` },
+      groupIds: [],
+      policies: [],
+      state: 'disabled',
+    })
+    const account = await manager.addAccount({
+      connectionId: connection.id,
+      kind: 'personal',
+      ownerUserId: 'user',
+      displayName,
+    })
+    const oauth = new UpstreamOAuth(pool, vault, 'http://gateway.test')
+    const started = await oauth.start(account.id, 'user')
+    await oauth.finish(
+      new URL(started.authorizationUrl).searchParams.get('state')!,
+      'code',
+    )
+    return { oauth, account, connection }
+  }
+
+  async function rejectedPersonalAccount(displayName: string) {
+    const authorized = await authorizedPersonalAccount(displayName)
+    tokenResponse = 'invalid_grant'
+    try {
+      await auth(await authorized.oauth.provider(authorized.account.id), {
+        serverUrl: `${oauthBase}mcp`,
+      }).catch(() => undefined)
+    } finally {
+      tokenResponse = 'granted'
+    }
+    return authorized
+  }
+
+  async function storedSecrets(accountId: string) {
+    const row = (
+      await pool.query(
+        'SELECT secret_ciphertext, secret_nonce, secret_format_version FROM mcp_accounts WHERE id=$1',
+        [accountId],
+      )
+    ).rows[0]
+    return vault.open({
+      ciphertext: new Uint8Array(row.secret_ciphertext),
+      nonce: new Uint8Array(row.secret_nonce),
+      version: row.secret_format_version,
+    })
+  }
+
+  async function authorizationError(accountId: string) {
+    const result = await pool.query(
+      'SELECT authorization_error FROM mcp_accounts WHERE id=$1',
+      [accountId],
+    )
+    return result.rows[0].authorization_error as string | null
+  }
 })

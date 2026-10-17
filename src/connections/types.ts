@@ -62,4 +62,6 @@ export type AccountSummary = {
   displayName: string
   namespace: string
   hasSecret: boolean
+  /** Why the upstream last rejected the Account's credentials, until they are replaced or re-authorized. */
+  authorizationError?: string
 }

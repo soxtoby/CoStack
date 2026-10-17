@@ -4,6 +4,11 @@ import { SeqSink } from 'sonant/sinks/seq'
 
 export const logger = createApplicationLogger()
 
+/** Sinks expect an Error; upstream libraries sometimes reject with other values. */
+export function asError(value: unknown) {
+  return value instanceof Error ? value : new Error(String(value))
+}
+
 export function createApplicationLogger(
   environment: Record<string, string | undefined> = process.env,
 ) {
