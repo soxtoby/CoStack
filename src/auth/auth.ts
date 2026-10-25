@@ -5,6 +5,7 @@ import { jwt } from 'better-auth/plugins'
 import { databasePool } from '../database/pool'
 import { ssoProvisioning } from './sso-provisioning'
 import { SsoConfiguration } from './sso'
+import { logTokenFailures } from './token-logging'
 import type { BetterAuthPlugin } from 'better-auth'
 
 const applicationUrl = process.env.APPLICATION_URL ?? 'http://localhost:3000'
@@ -57,5 +58,7 @@ export function authHandler(request: Request) {
       { status: 404 },
     )
   }
-  return auth.handler(request)
+  return path.endsWith('/oauth2/token')
+    ? logTokenFailures(request, auth.handler)
+    : auth.handler(request)
 }
