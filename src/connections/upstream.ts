@@ -132,9 +132,9 @@ function explainRejection(error: unknown) {
 
 /**
  * The MCP SDK only passes a fixed allowlist (PATH, HOME, ...) to server
- * processes, which drops the cache and first-run settings the container image
- * configures for `dnx`, `dotnet`, and `bunx`. Forward those without exposing
- * the rest of CoStack's environment (database URL, secret key, tokens).
+ * processes, which drops cache and runtime settings for `dnx`, `dotnet`, and
+ * `bunx`, such as the image's `BUN_INSTALL_CACHE_DIR`. Forward those without
+ * exposing the rest of CoStack's environment (database URL, secret key, tokens).
  */
 function toolchainEnvironment() {
   return Object.fromEntries(

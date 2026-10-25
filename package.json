@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "bun run src/dev.ts",
     "build": "vite build",
+    "bundle": "bun build ./server.ts --target=bun --external pg-native --sourcemap=linked --outdir build",
     "start": "bun run server.ts",
     "db:migrate": "bun run src/database/migrate.ts",
     "typecheck": "tsc --noEmit",

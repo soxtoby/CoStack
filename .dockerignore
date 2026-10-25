@@ -4,6 +4,7 @@
 .vite
 coverage
 dist
+build
 node_modules
 *.local
 .env

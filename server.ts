@@ -1,8 +1,8 @@
 // The build creates this entrypoint.
 // @ts-expect-error Production output does not exist before `bun run build`.
 import serverEntry from './dist/server/server.js'
-import { healthResponse } from './src/server/health'
 import { logger } from './src/server/logging'
+import { afterStartup } from './src/server/startup'
 import { migrate } from './src/database/migrate'
 import { authHandler } from './src/auth/auth'
 import { setupHandler } from './src/auth/setup'
@@ -27,7 +27,7 @@ function safeAssetPath(pathname: string) {
   return new URL(`.${decoded}`, clientRoot)
 }
 
-export function createProductionServer() {
+export function createProductionServer(startup: Promise<unknown>) {
   return Bun.serve({
     hostname: Bun.env.HOST ?? '0.0.0.0',
     port,
@@ -35,9 +35,8 @@ export function createProductionServer() {
       logger.error(error, 'Unhandled request failure')
       return new Response('Internal Server Error', { status: 500 })
     },
-    async fetch(request) {
+    fetch: afterStartup(startup, async (request) => {
       const url = new URL(request.url)
-      if (url.pathname === '/health') return healthResponse()
       if (url.pathname === '/mcp') return mcpHandler(request)
       if (url.pathname.startsWith('/api/auth/')) return authHandler(request)
       if (url.pathname.startsWith('/.well-known/')) return authHandler(request)
@@ -61,15 +60,28 @@ export function createProductionServer() {
         }
       }
       return serverEntry.fetch(request)
-    },
+    }),
   })
 }
 
 if (import.meta.main) {
-  await migrate()
-  await ensureOfficialRegistrySource()
-  await pruneAudit(databasePool())
-  const server = createProductionServer()
+  // Each startup event carries the time since the process started, separating
+  // the platform's share of a cold start from CoStack's own.
+  const elapsed = () => ({ ElapsedMilliseconds: Math.round(performance.now()) })
+  logger.with(elapsed()).info('CoStack starting')
+  // Listen before the database work so a cold start's first request waits
+  // only for that work, not for it plus the platform's next readiness probe.
+  const startup = (async () => {
+    await migrate()
+    await ensureOfficialRegistrySource()
+    await pruneAudit(databasePool())
+  })()
+  const server = createProductionServer(startup)
+  logger
+    .with(elapsed())
+    .info('CoStack listening on {Url}', { Url: server.url.toString() })
+  await startup
+  logger.with(elapsed()).info('CoStack ready')
   await refreshDueConnections()
   const refreshTimer = setInterval(
     () =>
@@ -114,5 +126,4 @@ if (import.meta.main) {
   }
   process.once('SIGTERM', () => void shutdown())
   process.once('SIGINT', () => void shutdown())
-  logger.info('CoStack listening on {Url}', { Url: server.url.toString() })
 }
