@@ -605,7 +605,7 @@ export function ConnectionForm(p: {
   )
 }
 
-function ConnectionDetail(p: {
+export function ConnectionDetail(p: {
   detail: ControlData['detail']
   canConnections: boolean
   canAccounts: boolean
@@ -615,14 +615,17 @@ function ConnectionDetail(p: {
   const bundled = findBundledMcp(d.transport_config)
   const [credentials, setCredentials] = useState<string>()
   const [addingAccount, setAddingAccount] = useState(false)
+  const canAddAccount = p.canAccounts || d.personal_account_eligible
   return (
     <>
       <header className="detail-head">
         <h3>Accounts</h3>
         <div className="detail-actions">
-          <button className="primary" onClick={() => setAddingAccount(true)}>
-            Add Account
-          </button>
+          {canAddAccount && (
+            <button className="primary" onClick={() => setAddingAccount(true)}>
+              Add Account
+            </button>
+          )}
           {p.canConnections && (
             <Link
               className="secondary"
@@ -637,17 +640,16 @@ function ConnectionDetail(p: {
       </header>
       {d.accounts.length === 0 && (
         <p>
-          No Accounts yet. Choose Add Account to sign in to this connection.
+          No Accounts yet.
+          {canAddAccount &&
+            ' Choose Add Account to sign in to this connection.'}
         </p>
       )}
-      {!d.personal_account_eligible && (
-        <p role="status">
-          Personal sign-in requires a Group you belong to.{' '}
-          {p.canConnections
-            ? 'Choose Configure and assign that Group under Group access.'
-            : 'Ask a connection manager to assign one of your Groups.'}
-        </p>
-      )}
+      <AccountAccessNotice
+        hasGroupAccess={(d.group_ids?.length ?? 0) > 0}
+        personalEligible={d.personal_account_eligible}
+        canConnections={p.canConnections}
+      />
       <div className="account-cards">
         {d.accounts.map((a) => (
           <article key={a.id}>
@@ -730,6 +732,26 @@ function ConnectionDetail(p: {
         </Modal>
       )}
     </>
+  )
+}
+
+function AccountAccessNotice(p: {
+  hasGroupAccess: boolean
+  personalEligible: boolean
+  canConnections: boolean
+}) {
+  if (p.personalEligible) return null
+  return (
+    <p role="status">
+      {p.hasGroupAccess
+        ? 'Personal sign-in requires a Group you belong to. '
+        : 'No Group has access to this connection yet, so nobody can use its Accounts. '}
+      {p.canConnections
+        ? 'Choose Configure and assign a Group under Group access.'
+        : p.hasGroupAccess
+          ? 'Ask a connection manager to assign one of your Groups.'
+          : 'Ask a connection manager to assign a Group.'}
+    </p>
   )
 }
 
@@ -936,7 +958,7 @@ function OAuthClientForm(p: {
   )
 }
 
-function AccountForm(p: {
+export function AccountForm(p: {
   account?: NonNullable<ControlData['detail']>['accounts'][number]
   connectionId: string
   shared: boolean
@@ -947,8 +969,11 @@ function AccountForm(p: {
   done: () => void
 }) {
   const [kind, setKind] = useState<'personal' | 'shared'>(
-    p.account?.kind ?? 'personal',
+    p.account?.kind ??
+      (p.shared && !p.personalEligible ? 'shared' : 'personal'),
   )
+  const personalBlocked =
+    !p.account && kind === 'personal' && !p.personalEligible
   const [manual, setManual] = useState(!p.oauth)
   const savedNames = p.account?.secret_names ?? []
   const savedRows = [
@@ -975,7 +1000,7 @@ function AccountForm(p: {
       }
       submitIcon={manual ? <AddAccountIcon /> : <OAuthIcon />}
       cancel={p.cancel}
-      disabled={!p.account && kind === 'personal' && !p.personalEligible}
+      disabled={personalBlocked}
       go={async (f) => {
         const variables = environment
           .map((row) => ({ ...row, name: row.name.trim() }))
@@ -1062,6 +1087,14 @@ function AccountForm(p: {
             Shared
           </button>
         </div>
+      )}
+      {personalBlocked && (
+        <p role="status">
+          Personal Accounts require membership in a Group with access to this
+          connection.
+          {p.shared &&
+            ' Choose Shared to add an Account for everyone with access.'}
+        </p>
       )}
       {p.oauth && (
         <>
