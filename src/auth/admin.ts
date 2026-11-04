@@ -8,6 +8,7 @@ import {
   loadAuthorization,
   may,
 } from './authorization'
+import { visibleGroups } from './visible-groups'
 import type { Capability } from './authorization'
 
 type Session = { user: { id: string; name: string; email: string } }
@@ -96,11 +97,7 @@ async function snapshot(request: Request) {
           LEFT JOIN group_memberships gm ON gm.principal_id=p.id LEFT JOIN groups g ON g.id=gm.group_id
           GROUP BY p.id,u.email ORDER BY p.display_name`)
         : Promise.resolve({ rows: [] }),
-      canManage
-        ? pool.query(`SELECT g.id,g.display_name,g.is_administrators,
-          COALESCE(array_agg(gc.capability_name) FILTER (WHERE gc.capability_name IS NOT NULL), '{}') AS capabilities
-          FROM groups g LEFT JOIN group_capabilities gc ON gc.group_id=g.id GROUP BY g.id ORDER BY g.is_administrators DESC,g.display_name`)
-        : Promise.resolve({ rows: [] }),
+      visibleGroups(pool, authorization),
       canManage
         ? pool.query(`SELECT p.id,p.normalized_email,p.claimed_at,p.revoked_at,
           COALESCE(array_agg(pg.group_id) FILTER (WHERE pg.group_id IS NOT NULL), '{}') AS group_ids
@@ -131,7 +128,7 @@ async function snapshot(request: Request) {
     },
     organization: organization.rows[0],
     users: users.rows,
-    groups: groups.rows,
+    groups,
     access: access.rows,
     serviceAccounts: services.rows,
     providers: providers.rows,
