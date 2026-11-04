@@ -974,8 +974,8 @@ export function AccountForm(p: {
   )
   const personalBlocked =
     !p.account && kind === 'personal' && !p.personalEligible
-  const [manual, setManual] = useState(!p.oauth)
   const savedNames = p.account?.secret_names ?? []
+  const [manual, setManual] = useState(!p.oauth || savedNames.length > 0)
   const savedRows = [
     ...Object.entries(p.account?.variables ?? {}).map(([name, value]) => ({
       name,
@@ -1117,9 +1117,23 @@ export function AccountForm(p: {
         <Field label="HTTP headers as JSON">
           <textarea
             name="secrets"
-            defaultValue={p.bundled?.manualCredentials ?? '{}'}
+            defaultValue={
+              savedNames.length
+                ? JSON.stringify(
+                    Object.fromEntries(savedNames.map((name) => [name, ''])),
+                    null,
+                    2,
+                  )
+                : (p.bundled?.manualCredentials ?? '{}')
+            }
             spellCheck={false}
           />
+          {savedNames.length > 0 && (
+            <p className="note">
+              Saved values are hidden. Leave a value blank to keep it; removing
+              a header deletes it.
+            </p>
+          )}
         </Field>
       )}
       {manual && !p.oauth && (

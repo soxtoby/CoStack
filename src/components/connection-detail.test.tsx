@@ -6,6 +6,7 @@ import {
   createRouter,
 } from '@tanstack/react-router'
 import { renderToStaticMarkup } from 'react-dom/server'
+import { bundledMcps } from '../connections/bundled-mcps'
 import { AccountForm, ConnectionDetail } from './control-app'
 import type { ReactNode } from 'react'
 
@@ -57,6 +58,65 @@ test('AccountForm for an ineligible Personal Account explains the disabled submi
     'Personal Accounts require membership in a Group with access to this connection.',
   )
   expect(result).toContain('<button class="primary" disabled="">')
+})
+
+test('AccountForm for saved manual HTTP credentials reopens in manual mode with the stored header names', () => {
+  const result = renderToStaticMarkup(
+    <AccountForm
+      account={{
+        id: 'account',
+        kind: 'personal',
+        display_name: 'Manual account',
+        namespace: 'manual',
+        has_secret: true,
+        secret_names: ['Authorization', 'X-Api-Key'],
+      }}
+      connectionId="linear"
+      shared={false}
+      oauth={true}
+      personalEligible={true}
+      bundled={bundledMcps.find((entry) => entry.id == 'linear')}
+      cancel={() => {}}
+      done={() => {}}
+    />,
+  )
+
+  expect(result).toContain('type="checkbox" checked=""')
+  const headers = result.match(
+    /<textarea[^>]*name="secrets"[^>]*>([\s\S]*?)<\/textarea>/,
+  )?.[1]
+  expect(headers).toBeDefined()
+  expect(JSON.parse(headers!.replaceAll('&quot;', '"'))).toEqual({
+    Authorization: '',
+    'X-Api-Key': '',
+  })
+  expect(result).toContain('Leave a value blank to keep it')
+  expect(result).toContain('Save credentials')
+})
+
+test('AccountForm for saved OAuth credentials reopens with OAuth sign-in', () => {
+  const result = renderToStaticMarkup(
+    <AccountForm
+      account={{
+        id: 'account',
+        kind: 'personal',
+        display_name: 'OAuth account',
+        namespace: 'oauth',
+        has_secret: true,
+        secret_names: [],
+      }}
+      connectionId="linear"
+      shared={false}
+      oauth={true}
+      personalEligible={true}
+      bundled={undefined}
+      cancel={() => {}}
+      done={() => {}}
+    />,
+  )
+
+  expect(result).toContain('Sign in with OAuth')
+  expect(result).not.toContain('name="secrets"')
 })
 
 async function render(node: ReactNode) {
