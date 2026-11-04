@@ -74,7 +74,7 @@ for (const [role, administrator, capabilities] of [
   ['administrator', true, []],
 ] as const) {
   test(
-    role + ' receives OAuth metadata only with account management access',
+    role + ' receives OAuth metadata only with connection management access',
     async () => {
       await pool.query(
         "UPDATE mcp_connections SET oauth_client_ciphertext=$1, oauth_client_nonce=$1, oauth_client_format_version=1 WHERE id='connection'",
@@ -102,7 +102,7 @@ for (const [role, administrator, capabilities] of [
           },
         )
         const data = await response.json()
-        const allowed = administrator || role === 'account manager'
+        const allowed = administrator || role == 'connection manager'
         expect(reads).toBe(allowed ? 1 : 0)
         expect(data.detail.oauth_application).toEqual(
           allowed

@@ -18,11 +18,12 @@ function principal(
 }
 
 describe('/api/control action authorization', () => {
-  test('restricts registry browsing and import to connection managers', () => {
+  test('restricts registry and OAuth configuration to connection managers', () => {
     for (const action of [
       'browse-registry',
       'import-registry',
       'set-tool-policies',
+      'configure-upstream-oauth',
     ]) {
       expect(mayPerformControlAction(principal(), action)).toBe(false)
       expect(

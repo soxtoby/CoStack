@@ -8,6 +8,7 @@ export function controlActionAccess(action: string): ControlAccess | undefined {
     [
       'create-connection',
       'edit-connection',
+      'configure-upstream-oauth',
       'set-tool-policies',
       'clone-connection',
       'set-enabled',
@@ -25,7 +26,6 @@ export function controlActionAccess(action: string): ControlAccess | undefined {
       'replace-shared-secret',
       'delete-shared-secret',
       'delete-shared-account',
-      'configure-upstream-oauth',
     ].includes(action)
   )
     return 'manage_accounts'

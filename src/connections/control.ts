@@ -130,6 +130,13 @@ async function connectionAction(
   userId: string,
 ) {
   const service = await manager()
+  if (action == 'configure-upstream-oauth') {
+    await service.configureOAuth(
+      String(body.connectionId),
+      body.config as never,
+    )
+    return Response.json({ ok: true })
+  }
   if (action === 'set-tool-policies')
     return Response.json(
       await service.setToolPolicies(
@@ -244,8 +251,7 @@ async function accountAction(body: Record<string, unknown>, action: string) {
     await service.deleteAccount(String(body.id))
     return Response.json({ ok: true })
   }
-  await service.configureOAuth(String(body.connectionId), body.config as never)
-  return Response.json({ ok: true })
+  throw new Error('Unknown account action')
 }
 
 async function createPersonalAccount(

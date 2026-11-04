@@ -50,7 +50,7 @@ export async function connectionSnapshot(
         authorization.id,
         canConnections || canAccounts,
         canAccounts,
-        canAccounts ? oauthConfiguration : undefined,
+        canConnections ? oauthConfiguration : undefined,
         accountSecretNames,
       )
     : undefined

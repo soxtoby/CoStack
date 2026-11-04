@@ -1913,7 +1913,9 @@ export function Groups({ data, reload }: View) {
                 checked={
                   group.is_administrators || group.capabilities.includes(c)
                 }
-                label={human(c)}
+                label={
+                  c == 'manage_accounts' ? 'Manage shared accounts' : human(c)
+                }
                 change={(v) =>
                   act('set-capabilities', {
                     groupId: group.id,
@@ -2765,20 +2767,17 @@ export function ConfigureConnectionPage({
             reload()
           }}
         />
-        {tab === 'connection' &&
-          (data.authorization?.administrator ||
-            data.authorization?.capabilities.includes('manage_accounts')) &&
-          d.transport === 'streamable_http' && (
-            <details className="registry-sources">
-              <summary>Advanced OAuth application</summary>
-              <OAuthClientForm
-                key={d.id}
-                connectionId={d.id}
-                configuration={d.oauth_application}
-                done={reload}
-              />
-            </details>
-          )}
+        {tab === 'connection' && d.transport === 'streamable_http' && (
+          <details className="registry-sources">
+            <summary>Advanced OAuth application</summary>
+            <OAuthClientForm
+              key={d.id}
+              connectionId={d.id}
+              configuration={d.oauth_application}
+              done={reload}
+            />
+          </details>
+        )}
       </div>
       {deleting && (
         <Modal
