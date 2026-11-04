@@ -96,9 +96,8 @@ export class ConnectionManager {
           input.registry?.version ?? null,
         ],
       )
-      await this.replaceChildren(database, id, input, discovery.tools)
-      if (discovery.error)
-        await this.recordHealth(database, id, false, discovery.error)
+      await this.replaceChildren(database, id, input)
+      await this.replaceDiscovery(database, id, discovery)
     })
     return { id, namespace, revision: 1, tools: discovery.tools }
   }
@@ -110,12 +109,16 @@ export class ConnectionManager {
     userId?: string,
   ) {
     validateInput(input)
-    const discovery = await this.discover(
-      id,
-      input.transport,
-      userId,
-      input.state === 'disabled',
-    )
+    // Renaming or changing Group access must not depend on the upstream
+    // accepting whoever is editing, so only rediscover when it could differ.
+    const discovery = (await this.upstreamUnchanged(id, input))
+      ? undefined
+      : await this.discover(
+          id,
+          input.transport,
+          userId,
+          input.state === 'disabled',
+        )
     await this.transaction(async (database) => {
       const result = await database.query(
         `UPDATE mcp_connections SET display_name=$1, transport=$2,
@@ -136,12 +139,19 @@ export class ConnectionManager {
       )
       if (result.rowCount !== 1)
         throw new RevisionConflictError('Connection changed; reload and retry')
-      await this.replaceChildren(database, id, input, discovery.tools)
-      if (discovery.error)
-        await this.recordHealth(database, id, false, discovery.error)
+      await this.replaceChildren(database, id, input)
+      if (discovery) await this.replaceDiscovery(database, id, discovery)
     })
-    await this.restartConnection(id)
-    return { id, revision: expectedRevision + 1, tools: discovery.tools }
+    if (discovery) await this.restartConnection(id)
+    return { id, revision: expectedRevision + 1, tools: discovery?.tools }
+  }
+
+  private async upstreamUnchanged(id: string, input: ConnectionInput) {
+    const result = await this.pool.query<{ unchanged: boolean }>(
+      'SELECT transport_config=$2::jsonb AND state=$3 AS unchanged FROM mcp_connections WHERE id=$1',
+      [id, JSON.stringify(input.transport), input.state],
+    )
+    return result.rows[0]?.unchanged ?? false
   }
 
   async clone(id: string, displayName: string, namespace?: string) {
@@ -584,7 +594,6 @@ export class ConnectionManager {
     database: PoolClient,
     id: string,
     input: ConnectionInput,
-    tools: Array<DiscoveredTool>,
   ) {
     await database.query(
       'DELETE FROM connection_groups WHERE connection_id=$1',
@@ -593,10 +602,6 @@ export class ConnectionManager {
     await database.query('DELETE FROM tool_policies WHERE connection_id=$1', [
       id,
     ])
-    await database.query(
-      'DELETE FROM connection_tools WHERE connection_id=$1',
-      [id],
-    )
     for (const groupId of input.groupIds)
       await database.query(
         'INSERT INTO connection_groups (connection_id, group_id) VALUES ($1,$2)',
@@ -614,12 +619,23 @@ export class ConnectionManager {
           policy.effect,
         ],
       )
-    await insertTools(database, id, tools)
+  }
+
+  private async replaceDiscovery(
+    database: PoolClient,
+    id: string,
+    discovery: { tools: Array<DiscoveredTool>; error?: string },
+  ) {
     await database.query(
-      `INSERT INTO connection_health (connection_id, healthy, error)
-       VALUES ($1,true,null) ON CONFLICT (connection_id) DO UPDATE
-       SET checked_at=now(), healthy=true, error=null`,
+      'DELETE FROM connection_tools WHERE connection_id=$1',
       [id],
+    )
+    await insertTools(database, id, discovery.tools)
+    await this.recordHealth(
+      database,
+      id,
+      !discovery.error,
+      discovery.error ?? null,
     )
   }
 

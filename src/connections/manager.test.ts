@@ -172,6 +172,95 @@ describe('ConnectionManager', () => {
         ])
     }
   })
+  test('edit that changes only Group access saves without contacting a rejecting upstream', async () => {
+    let connectionId: string | undefined
+    let rejecting = false
+    const local = new ConnectionManager(pool, vault, () =>
+      rejecting
+        ? Promise.reject(
+            new UpstreamAuthorizationRequiredError('Upstream rejected (401)'),
+          )
+        : Promise.resolve(fake),
+    )
+    const input = {
+      organizationId: 'org',
+      displayName: 'Octopus',
+      transport: {
+        kind: 'streamable_http' as const,
+        url: 'https://mcp.example.test/octopus',
+      },
+      groupIds: [],
+      policies: [{ pattern: '*', effect: 'block' as const }],
+      state: 'enabled' as const,
+    }
+    try {
+      const connection = await local.create(input)
+      connectionId = connection.id
+      rejecting = true
+
+      const result = await local.edit(connection.id, connection.revision, {
+        ...input,
+        groupIds: ['group'],
+      })
+
+      expect(result.revision).toBe(2)
+      expect(
+        (
+          await pool.query(
+            `SELECT
+              ARRAY(SELECT group_id FROM connection_groups WHERE connection_id=$1) groups,
+              ARRAY(SELECT name FROM connection_tools WHERE connection_id=$1) tools,
+              (SELECT healthy FROM connection_health WHERE connection_id=$1) healthy`,
+            [connection.id],
+          )
+        ).rows[0],
+      ).toEqual({ groups: ['group'], tools: ['read_issue'], healthy: true })
+    } finally {
+      await local.close()
+      if (connectionId)
+        await pool.query('DELETE FROM mcp_connections WHERE id=$1', [
+          connectionId,
+        ])
+    }
+  })
+
+  test('edit that changes the transport rediscovers tools', async () => {
+    let connectionId: string | undefined
+    let discoveries = 0
+    const local = new ConnectionManager(pool, vault, () => {
+      discoveries++
+      return Promise.resolve(fake)
+    })
+    const input = {
+      organizationId: 'org',
+      displayName: 'Moving',
+      transport: {
+        kind: 'streamable_http' as const,
+        url: 'https://mcp.example.test/old',
+      },
+      groupIds: ['group'],
+      policies: [],
+      state: 'enabled' as const,
+    }
+    try {
+      const connection = await local.create(input)
+      connectionId = connection.id
+
+      await local.edit(connection.id, connection.revision, {
+        ...input,
+        transport: { ...input.transport, url: 'https://mcp.example.test/new' },
+      })
+
+      expect(discoveries).toBe(2)
+    } finally {
+      await local.close()
+      if (connectionId)
+        await pool.query('DELETE FROM mcp_connections WHERE id=$1', [
+          connectionId,
+        ])
+    }
+  })
+
   test('validates before save, discovers tools, and protects revisions', async () => {
     const created = await manager.create({
       organizationId: 'org',
