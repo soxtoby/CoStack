@@ -1954,16 +1954,35 @@ export function Services({ data, reload }: View) {
   return (
     <Page title="Service Accounts">
       <p className="note">
-        Credentials appear once. Store them before leaving this page.
+        Service Accounts let automation use CoStack's MCP server without a
+        person signing in. Each one gets a client ID and secret for the OAuth
+        client credentials grant.
       </p>
       {credential && (
         <div className="secret">
-          <code>NEW CLIENT CREDENTIAL</code>
-          <p>This secret cannot be shown again.</p>
-          <pre>{credential.clientId}</pre>
-          <pre>{credential.clientSecret}</pre>
-          <button onClick={() => setCredential(undefined)}>
-            I have stored it
+          <code>SERVICE ACCOUNT CREATED</code>
+          <p>
+            Configure your automation's MCP client with OAuth client
+            credentials, using the values below and the <b>mcp:use</b> scope.
+            Copy the client secret now: it cannot be shown again.
+          </p>
+          <CopyField label="MCP URL" value={`${location.origin}/mcp`} />
+          <CopyField
+            label="Client ID"
+            value={credential.clientId}
+            hint="Not secret. It also appears in the list below."
+          />
+          <CopyField
+            label="Client secret"
+            value={credential.clientSecret}
+            hint="Treat it like a password. CoStack keeps only a hash of it."
+          />
+          <button
+            className="primary"
+            type="button"
+            onClick={() => setCredential(undefined)}
+          >
+            I have stored the secret
           </button>
         </div>
       )}
@@ -2008,6 +2027,28 @@ export function Services({ data, reload }: View) {
         ))}
       </Rows>
     </Page>
+  )
+}
+function CopyField(p: { label: string; value: string; hint?: string }) {
+  const [copied, setCopied] = useState(false)
+  return (
+    <div className="field">
+      <span>{p.label}</span>
+      <div className="sign-in-link">
+        <code>{p.value}</code>
+        <button
+          className="secondary"
+          type="button"
+          onClick={async () => {
+            await navigator.clipboard.writeText(p.value)
+            setCopied(true)
+          }}
+        >
+          {copied ? 'Copied' : 'Copy'}
+        </button>
+      </div>
+      {p.hint && <small>{p.hint}</small>}
+    </div>
   )
 }
 export function Sso({

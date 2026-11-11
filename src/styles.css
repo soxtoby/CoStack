@@ -979,13 +979,25 @@ fieldset {
   border-radius: var(--radius);
   background: var(--surface-2);
   padding: 14px;
+  display: grid;
+  gap: 12px;
 }
 .secret > code {
   font: 11px/1.5 var(--font-mono);
   letter-spacing: 0.08em;
   color: var(--accent-text);
 }
-.secret pre,
+.secret > p {
+  margin: 0;
+  max-width: 620px;
+}
+.secret .sign-in-link {
+  margin-bottom: 0;
+  grid-template-columns: minmax(0, 1fr) 72px;
+}
+.secret > .primary {
+  justify-self: start;
+}
 .registry pre {
   background: var(--surface-code);
   border-radius: var(--radius);
