@@ -8,6 +8,7 @@ import {
   loadAuthorization,
   may,
 } from './authorization'
+import { deleteServiceAccount } from './service-accounts'
 import { visibleGroups } from './visible-groups'
 import type { Capability } from './authorization'
 
@@ -49,6 +50,8 @@ export async function adminHandler(request: Request) {
     if (action === 'set-capabilities') return setCapabilities(request, body)
     if (action === 'set-disabled') return setDisabled(request, body)
     if (action === 'create-service-account') return createServiceAccount(body)
+    if (action === 'delete-service-account')
+      return removeServiceAccount(request, body)
     return Response.json({ error: 'Unknown action' }, { status: 400 })
   } catch (error) {
     if (error instanceof Response) return error
@@ -329,6 +332,28 @@ async function createServiceAccount(body: Record<string, unknown>) {
     ok: true,
     credential: { clientId, clientSecret: secret },
   })
+}
+
+async function removeServiceAccount(
+  request: Request,
+  body: Record<string, unknown>,
+) {
+  const pool = databasePool()
+  const principalId = String(body.id)
+  const admin = await pool.query<{ is_admin: boolean }>(
+    `SELECT EXISTS(SELECT 1 FROM group_memberships gm JOIN groups g ON g.id=gm.group_id WHERE gm.principal_id=$1 AND g.is_administrators) is_admin`,
+    [principalId],
+  )
+  if (admin.rows[0]?.is_admin) {
+    const actor = await requireCapability(request, 'manage_principals_groups')
+    if (!actor.authorization.administrator)
+      throw new Response('Only Administrators may delete an Administrator', {
+        status: 403,
+      })
+  }
+
+  await deleteServiceAccount(pool, principalId)
+  return Response.json({ ok: true })
 }
 
 function stringArray(value: unknown) {

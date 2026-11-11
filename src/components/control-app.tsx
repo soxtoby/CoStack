@@ -1956,7 +1956,10 @@ export function Services({ data, reload }: View) {
       <p className="note">
         Service Accounts let automation use CoStack's MCP server without a
         person signing in. Each one gets a client ID and secret for the OAuth
-        client credentials grant.
+        client credentials grant. Suspend a Service Account to block it
+        immediately while keeping its credentials and Groups, so you can restore
+        it later. Delete a suspended Service Account to remove it and its
+        credentials permanently.
       </p>
       {credential && (
         <div className="secret">
@@ -2013,7 +2016,7 @@ export function Services({ data, reload }: View) {
               {s.disabled_at ? 'Suspended' : 'Active'}
             </Status>
             <button
-              className="danger"
+              className={s.disabled_at ? 'secondary' : 'danger'}
               onClick={() =>
                 act('set-disabled', {
                   id: s.id,
@@ -2023,6 +2026,16 @@ export function Services({ data, reload }: View) {
             >
               {s.disabled_at ? 'Restore' : 'Suspend'}
             </button>
+            {s.disabled_at && (
+              <button
+                className="danger"
+                onClick={() =>
+                  act('delete-service-account', { id: s.id }).then(reload)
+                }
+              >
+                Delete
+              </button>
+            )}
           </article>
         ))}
       </Rows>
