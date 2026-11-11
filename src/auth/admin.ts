@@ -297,10 +297,6 @@ async function createServiceAccount(body: Record<string, unknown>) {
       [id, await organizationId(), name],
     )
     await client.query(
-      'INSERT INTO service_accounts(principal_id,oauth_client_id) VALUES($1,$2)',
-      [id, clientId],
-    )
-    await client.query(
       `INSERT INTO "oauthClient"(id,"clientId","clientSecret",disabled,"clientCredentialsScopes","redirectUris","grantTypes","createdAt","updatedAt",name,"referenceId") VALUES($1,$2,$3,false,$4,$5,$6,now(),now(),$7,$8)`,
       [
         crypto.randomUUID(),
@@ -312,6 +308,10 @@ async function createServiceAccount(body: Record<string, unknown>) {
         name,
         id,
       ],
+    )
+    await client.query(
+      'INSERT INTO service_accounts(principal_id,oauth_client_id) VALUES($1,$2)',
+      [id, clientId],
     )
     for (const groupId of stringArray(body.groupIds))
       await client.query(
